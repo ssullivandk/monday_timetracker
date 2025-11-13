@@ -1,0 +1,44 @@
+.timer-display {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 16px;
+	padding: 0 8px 0 24px;
+	background-color: var(--color--background-secondary);
+	border-radius: var(--border-radius-small);
+
+	.timer-time {
+		font-size: 18px;
+		line-height: 1;
+		font-weight: 500;
+		color: var(--color--text-disabled);
+		font-family: var(--font--mono);
+
+		&.active {
+			color: var(--color--text-primary);
+			animation: none;
+		}
+
+		&.paused {
+			color: var(--color--text-disabled);
+			animation: blink 1.5s step-start infinite;
+		}
+	}
+
+	.btn-reset {
+		height: var(--space-32);
+		width: var(--space-32);
+		padding: 0;
+
+		svg {
+			width: var(--space-20);
+			height: var(--space-20);
+		}
+	}
+}
+
+@keyframes blink {
+	50% {
+		color: var(--color--text-primary);
+	}
+}

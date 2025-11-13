@@ -1,21 +1,114 @@
 // Variables
-$primary-color: #007bff;
-$secondary-color: #6c757d;
-$success-color: #28a745;
-$danger-color: #dc3545;
-$light-color: #f8f9fa;
-$dark-color: #343a40;
-$border-color: #dee2e6;
-$text-color: #212529;
-$background-color: #ffffff;
+// CSS
+:root {
+	--color--primary: #db007a;
+	--color--primary-hover: #f31b63;
+	--color--primary-selected: #ffd640;
+	--color--primary-selected-hover: #f7c200;
+	--color--primary-highlight: #f4bedc;
+	--color--secondary: #ffd640;
+	--color--tertiary: #92907b;
+	--color--primary-light: #f4bedc;
+	--color--primary-extra-light: #ffe7f4;
+	--color--primary-dark: #910854;
+	--color--secondary-hover: #f7c200;
+	--color--secondary-light: #f6e5b1;
+	--color--secondary-extra-light: #fff5d5;
+	--color--secondary-dark: #765f0a;
+	--color--tertiary-light: #d1d0c7;
+	--color--tertiary-dark: #62604a;
 
-$font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", sans-serif;
+	--color--primary-surface: var(--color--background-secondary);
+	--color--background-primary: #ffffff;
+	--color--background-primary-hover: var(--color--tertiary-light);
+	--color--background-secondary: #f5f4f0;
+	--color--background-secondary-hover: #ffffff;
+	--color--background-disabled: var(--color--tertiary-extra-light);
+	--color--background-backdrop: rgba(245, 244, 240, 0.7);
+
+	--color--border-ui: var(--color--tertiary-light);
+	--color--border-layout: var(--color--background-secondary);
+
+	--color--text-primary: var(--color--contrast);
+	--color--text-secondary: var(--color--tertiary-dark);
+	--color--text-on-inverted: #ffffff;
+	--color--text-on-primary: #ffffff;
+	--color--text-disabled: var(--color--tertiary);
+	--color--text-placeholder: var(--color--tertiary);
+	--color--text-link: #1f76c2;
+
+	--color--icon: var(--color--tertiary);
+	--color--icon-on-primary: #ffffff;
+	--color--icon-on-secondary: var(--color--contrast);
+
+	--color--contrast: #282616;
+	--color--error: #f31b63;
+	--color--error-light: #f4bedc;
+	--color--error-extra-light: #ffe7f4;
+	--color--error-dark: #910854;
+	--color--success: #4ade80;
+	--color--success-light: #b0f7c5;
+	--color--success-extra-light: #e6ffed;
+	--color--success-dark: #0e8c4a;
+
+	--font--primary: "Gibson", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", sans-serif;
+	--font--headlines: "Gibson", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", sans-serif;
+	--font--body: "Gill Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", sans-serif;
+	--font--mono: "Geist Mono", monospace;
+
+	--box-shadow--xs: 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+	--box-shadow--small: 0 4px 8px rgba(0, 0, 0, 0.2);
+	--box-shadow--medium: 0 6px 20px rgba(0, 0, 0, 0.2);
+	--box-shadow--large: 0 15px 50px rgba(0, 0, 0, 0.4);
+	--box-shadow--primary: 0 4px 12px rgba(219, 0, 122, 0.3);
+	--box-shadow--secondary: 0 4px 12px rgba(255, 214, 64, 0.3);
+	--box-shadow--error: 0 4px 12px rgba(243, 27, 99, 0.3);
+	--box-shadow--success: 0 4px 12px rgba(74, 222, 128, 0.3);
+
+	--transition: all 0.1s ease-in-out;
+}
+
+// SCSS
+$color-primary: var(--color--primary);
+$color-secondary: var(--color--secondary);
+$color-tertiary: var(--color--tertiary);
+$color-primary-hover: var(--color--primary-hover);
+$color-primary-light: var(--color--primary-light);
+$color-primary-extra-light: var(--color--primary-extra-light);
+$color-primary-dark: var(--color--primary-dark);
+$color-secondary-hover: var(--color--secondary-hover);
+$color-secondary-light: var(--color--secondary-light);
+$color-secondary-extra-light: var(--color--secondary-extra-light);
+$color-secondary-dark: var(--color--secondary-dark);
+$color-tertiary-light: var(--color--tertiary-light);
+$color-tertiary-dark: var(--color--tertiary-dark);
+$color-background: var(--color--background-primary);
+$color-background-secondary: var(--color--background-secondary);
+$color-border: var(--color--border);
+$color-contrast: var(--color--contrast);
+$color-error: var(--color--error);
+$color-error-light: var(--color--error-light);
+$color-error-extra-light: var(--color--error-extra-light);
+$color-error-dark: var(--color--error-dark);
+$color-success: var(--color--success);
+$color-success-light: var(--color--success-light);
+$color-success-extra-light: var(--color--success-extra-light);
+$color-success-dark: var(--color--success-dark);
+
+// !Change to Gibson & Gill Sans later
+$font-family: "Gibson", "Gill Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", sans-serif;
 $font-size-base: 16px;
 $line-height-base: 1.5;
 
-$border-radius: 8px;
-$box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-$transition: all 0.2s ease-in-out;
+$box-shadow-xs: var(--box-shadow-xs);
+$box-shadow-small: var(--box-shadow-small);
+$box-shadow-medium: var(--box-shadow-medium);
+$box-shadow-large: var(--box-shadow-large);
+$box-shadow-primary: 0 4px 12px rgba(219, 0, 122, 0.3);
+$box-shadow-secondary: 0 4px 12px rgba(255, 214, 64, 0.3);
+$box-shadow-error: 0 4px 12px rgba(243, 27, 99, 0.3);
+$box-shadow-success: 0 4px 12px rgba(74, 222, 128, 0.3);
+$transition: all 0.1s ease-in-out;
 
 // Reset and base styles
 * {
@@ -31,15 +124,12 @@ body {
 	font-family: $font-family;
 	font-size: $font-size-base;
 	line-height: $line-height-base;
-	color: $text-color;
-	background-color: $light-color;
+	color: $color-contrast;
+	background-color: $color-background;
 }
 
 main {
 	min-height: 100vh;
-	padding: 2rem;
-	max-width: 1200px;
-	margin: 0 auto;
 }
 
 // Typography
@@ -57,19 +147,19 @@ h6 {
 h1 {
 	font-size: 2.5rem;
 	text-align: center;
-	color: $dark-color;
+	color: $color-primary;
 	margin-bottom: 2rem;
 }
 
 h2 {
 	font-size: 1.75rem;
-	color: $dark-color;
+	color: $color-secondary;
 	margin-bottom: 1.5rem;
 }
 
 h3 {
 	font-size: 1.25rem;
-	color: $dark-color;
+	color: $color-tertiary-dark;
 	margin-bottom: 1rem;
 }
 
@@ -79,75 +169,124 @@ p {
 
 // Button styles
 .btn {
-	display: inline-block;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.3em;
 	padding: 0.75rem 1.5rem;
 	font-size: 1rem;
-	font-weight: 500;
+	font-weight: 700;
 	text-align: center;
 	text-decoration: none;
 	border: none;
-	border-radius: $border-radius;
+	border-radius: var(--border-radius--small);
 	cursor: pointer;
 	transition: $transition;
-	min-width: 100px;
 
 	&:focus {
-		outline: 2px solid $primary-color;
+		outline: 2px solid $color-primary;
 		outline-offset: 2px;
 	}
 
 	&:disabled {
-		opacity: 0.6;
 		cursor: not-allowed;
 	}
 
 	&.btn-primary {
-		background-color: $primary-color;
+		background-color: $color-primary;
 		color: white;
 
 		&:hover:not(:disabled) {
-			background-color: darken($primary-color, 10%);
+			background-color: $color-primary-hover;
+		}
+
+		&:disabled {
+			background-color: $color-tertiary-light;
+			color: $color-tertiary;
 		}
 	}
 
 	&.btn-secondary {
-		background-color: $secondary-color;
-		color: white;
+		background-color: $color-secondary;
+		color: $color-contrast;
 
 		&:hover:not(:disabled) {
-			background-color: darken($secondary-color, 10%);
+			background-color: $color-secondary-hover;
+		}
+
+		&:disabled {
+			background-color: $color-tertiary-light;
+			color: $color-tertiary;
+		}
+	}
+
+	&.btn-tertiary {
+		background-color: $color-tertiary-light;
+		color: $color-contrast;
+
+		&:hover:not(:disabled) {
+			background-color: $color-tertiary-dark;
+			color: white;
+		}
+
+		&:disabled {
+			background-color: $color-tertiary-light;
+			color: $color-tertiary;
 		}
 	}
 
 	&.btn-danger {
-		background-color: $danger-color;
+		background-color: $color-error;
 		color: white;
 
 		&:hover:not(:disabled) {
-			background-color: darken($danger-color, 10%);
+			background-color: $color-error-dark;
+		}
+	}
+
+	&.btn-success {
+		background-color: $color-success;
+		color: $color-contrast;
+
+		&:hover:not(:disabled) {
+			background-color: $color-success-dark;
+			color: white;
 		}
 	}
 }
 
+// Dashboard styles
+#dashboard-app {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	background-color: $color-background;
+	min-height: 100vh;
+}
+
 // Timer styles
 .timer-container {
-	background: $background-color;
-	border-radius: $border-radius;
+	/* width: clamp(300px, 50%, 600px);
+	background: $color-background;
 	padding: 2rem;
-	margin-bottom: 2rem;
-	box-shadow: $box-shadow;
+	box-shadow: var(--box-shadow-small);
 	text-align: center;
+	overflow: visible; */
 }
 
-.timer-display {
-	margin-bottom: 2rem;
+label {
+	display: block;
+	width: 100%;
+	margin-bottom: 0.5rem;
 }
 
-.timer-time {
-	font-size: 3rem;
-	font-weight: 700;
-	color: $dark-color;
-	font-family: "Courier New", monospace;
+.dropdown {
+	position: relative;
+	width: 100%;
+	text-align: left;
+	.dropdown-item {
+		padding-left: 16px;
+	}
 }
 
 .timer-controls {
@@ -161,9 +300,15 @@ p {
 .task-input-container {
 	margin-top: 2rem;
 	padding: 1.5rem;
-	background-color: lighten($light-color, 2%);
-	border-radius: $border-radius;
-	border: 1px solid $border-color;
+	background-color: $color-background;
+	border-radius: var(--border-radius--small);
+	border: 1px solid $color-tertiary;
+
+	.task-input-dropdowns {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
 }
 
 .task-input {
@@ -173,21 +318,21 @@ p {
 		display: block;
 		margin-bottom: 0.5rem;
 		font-weight: 500;
-		color: $dark-color;
+		color: $color-contrast;
 	}
 
 	input {
 		width: 100%;
 		padding: 0.75rem;
 		font-size: 1rem;
-		border: 1px solid $border-color;
-		border-radius: $border-radius;
+		border: 1px solid $color-tertiary;
+		border-radius: var(--border-radius--small);
 		transition: $transition;
 
 		&:focus {
 			outline: none;
-			border-color: $primary-color;
-			box-shadow: 0 0 0 2px rgba($primary-color, 0.25);
+			border-color: $color-primary;
+			box-shadow: 0 0 0 2px rgba($color-primary, 0.25);
 		}
 	}
 }
@@ -200,15 +345,15 @@ p {
 
 // Time entries styles
 .time-entries-container {
-	background: $background-color;
-	border-radius: $border-radius;
+	background: $color-background;
+	border-radius: var(--border-radius--small);
 	padding: 2rem;
-	box-shadow: $box-shadow;
+	box-shadow: $box-shadow-small;
 }
 
 .no-entries {
 	text-align: center;
-	color: $secondary-color;
+	color: $color-secondary;
 	font-style: italic;
 	padding: 2rem;
 }
@@ -226,13 +371,13 @@ p {
 	td {
 		padding: 1rem;
 		text-align: left;
-		border-bottom: 1px solid $border-color;
+		border-bottom: 1px solid $color-tertiary;
 	}
 
 	th {
-		background-color: lighten($light-color, 2%);
+		background-color: $color-background-secondary;
 		font-weight: 600;
-		color: $dark-color;
+		color: $color-contrast;
 		position: sticky;
 		top: 0;
 	}
@@ -241,12 +386,12 @@ p {
 		transition: $transition;
 
 		&:hover {
-			background-color: lighten($light-color, 1%);
+			background-color: $color-secondary-extra-light;
 		}
 	}
 
 	.task-name {
-		font-weight: 500;
+		font-weight: 700;
 		max-width: 200px;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -254,13 +399,13 @@ p {
 	}
 
 	.timestamp {
-		color: $secondary-color;
+		color: $color-tertiary;
 		white-space: nowrap;
 	}
 
 	.duration {
-		font-weight: 500;
-		color: $primary-color;
+		font-weight: 700;
+		color: $color-primary;
 	}
 }
 
@@ -342,28 +487,28 @@ p {
 // Focus styles for keyboard navigation
 .btn:focus,
 input:focus {
-	outline: 2px solid $primary-color;
+	outline: 2px solid $color-primary;
 	outline-offset: 2px;
 }
 
 // High contrast mode support
 @media (prefers-contrast: high) {
-	$primary-color: #0000ff;
-	$secondary-color: #666666;
-	$border-color: #000000;
+	$primary-color: $color-contrast;
+	$secondary-color: $color-tertiary;
+	$border-color: $color-contrast;
 
 	.btn-primary {
-		background-color: $primary-color;
-		border: 2px solid $primary-color;
+		background-color: $color-contrast;
+		border: 2px solid $color-primary;
 	}
 
 	.btn-secondary {
-		background-color: $secondary-color;
-		border: 2px solid $secondary-color;
+		background-color: $color-secondary;
+		border: 2px solid $color-secondary;
 	}
 
 	.btn-danger {
-		background-color: #ff0000;
-		border: 2px solid #ff0000;
+		background-color: $color-error;
+		border: 2px solid $color-error;
 	}
 }

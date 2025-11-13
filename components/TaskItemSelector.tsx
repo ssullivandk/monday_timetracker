@@ -1,0 +1,353 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { Flex, Text } from "@vibe/core";
+import Select from "react-select";
+import mondaySdk from "monday-sdk-js";
+import { useQuery } from "@tanstack/react-query";
+
+// Type definitions for monday.com API responses
+type APIError = {
+	message: string;
+	status: number;
+	errors?: Array<{
+		message: string;
+		path?: string[];
+	}>;
+};
+
+type APIResponse<T> = {
+	loading: boolean;
+	error: APIError | null;
+	data: {
+		loading: boolean;
+		error: APIError | null;
+		data: T;
+	};
+};
+
+interface TaskItemSelectorProps {
+	onSelectionChange: (data: { boardId?: string; itemId?: string; role?: string }) => void;
+	onResetRef?: (resetFn: () => void) => void;
+	initialValues?: {
+		boardId?: string;
+		itemId?: string;
+		role?: string;
+	};
+}
+
+type DropdownOption = {
+	id: string;
+	value: string;
+	label: string;
+	[key: string]: unknown;
+};
+
+type DropdownGroupOption = {
+	label: string;
+	options: DropdownOption[];
+};
+
+type TaskGroupsResponse = {
+	groups: {
+		label: string;
+		options: {
+			value: string;
+			label: string;
+		}[];
+	}[];
+};
+
+export default function TaskItemSelector({ onSelectionChange, onResetRef, initialValues }: TaskItemSelectorProps) {
+	// State management
+	const [boards, setBoards] = useState<DropdownOption[]>([]);
+	const [tasks, setTasks] = useState<DropdownGroupOption[]>([]);
+	const [tasksOptions, setTasksOptions] = useState<DropdownOption[]>([]); // Keep if used elsewhere, but remove flattening below
+	const [selectedBoard, setSelectedBoard] = useState<DropdownOption | null>(null);
+	const [selectedTask, setSelectedTask] = useState<DropdownOption | null>(null);
+	const [selectedRole, setSelectedRole] = useState<DropdownOption | null>(null);
+	const [loadingBoards, setLoadingBoards] = useState(false);
+	const [loadingTasks, setLoadingTasks] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	// Reset functions
+	const resetBoard = useCallback(() => {
+		setSelectedBoard(null);
+		setSelectedTask(null);
+	}, []);
+
+	const resetTask = useCallback(() => {
+		setSelectedTask(null);
+	}, []);
+
+	const resetRole = useCallback(() => {
+		setSelectedRole(null);
+	}, []);
+
+	const resetSelections = useCallback(() => {
+		resetBoard();
+		resetTask();
+		resetRole();
+		setTasks([]);
+		onSelectionChange({
+			boardId: undefined,
+			itemId: undefined,
+			role: undefined,
+		});
+	}, [onSelectionChange]);
+
+	// Provide reset function to parent via callback
+	useEffect(() => {
+		if (onResetRef) {
+			onResetRef(resetSelections);
+		}
+	}, [onResetRef, resetSelections]);
+
+	// Role options (German)
+	const roles: DropdownOption[] = [
+		{ label: "Projektleitung", id: "projektleitung", value: "projektleitung" },
+		{ label: "Assistenz", id: "assistenz", value: "assistenz" },
+		{ label: "Graphik", id: "graphik", value: "graphik" },
+		{ label: "Copy Writing", id: "copy_writing", value: "copy_writing" },
+		{ label: "Medical Writing", id: "medical_writing", value: "medical_writing" },
+		{ label: "Entwicklung/Development", id: "entwicklung", value: "entwicklung" },
+		{ label: "Geschäftsführung", id: "geschaeftsfuehrung", value: "geschaeftsfuehrung" },
+		{ label: "Intern oder Akquise", id: "intern", value: "intern" },
+	];
+
+	// Create loading placeholder options for tasks
+	/* const loadingTasksOptions: DropdownGroupOption[] = [
+		{
+			label: "Lade Aufgaben...",
+			options: Array.from({ length: 5 }, (_, i) => ({
+				label: `Loading ${i + 1}...`,
+				id: `loading-${i}`,
+				value: `loading-${i}`,
+				disabled: true,
+			})),
+		},
+	]; */
+
+	// Load connected boards on mount (client-side only)
+	useEffect(() => {
+		loadBoards();
+	}, []);
+
+	// Load boards function
+	const loadBoards = async () => {
+		if (typeof window === "undefined") return;
+
+		setLoadingBoards(true);
+		setError(null);
+
+		try {
+			const monday = mondaySdk();
+			const contextResponse = await monday.get("context");
+
+			if (!(contextResponse.data as any)?.boardIds) {
+				setError("Keine verbundenen Boards gefunden");
+				return;
+			}
+
+			console.log("Context response: ", contextResponse);
+			const boardIds = (contextResponse.data as any).boardIds;
+
+			if (!boardIds || boardIds.length === 0) {
+				setBoards([]);
+				return;
+			}
+
+			const response = await fetch("/api/connectedBoards", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ boardIds }),
+			});
+
+			if (!response.ok) {
+				throw new Error("Failed to fetch boards");
+			}
+
+			const data = await response.json();
+
+			if (data.error) {
+				throw new Error(data.error);
+			}
+
+			const boardOptions = (data.boards || []).map((board: any) => ({
+				label: board.label,
+				id: board.value.toString(),
+				value: board.value.toString(),
+			}));
+			setBoards(boardOptions);
+			console.log("Loaded boards: ", boardOptions);
+			console.log("boards: ", boards);
+
+			// Set initial values if provided
+			if (initialValues?.boardId && boardOptions.length > 0) {
+				const initialBoard = boardOptions.find((board: DropdownOption) => board.id === initialValues.boardId);
+				if (initialBoard) {
+					setSelectedBoard(initialBoard);
+				}
+			}
+
+			if (initialValues?.role && roles.length > 0) {
+				const initialRole = roles.find((role) => role.id === initialValues.role);
+				if (initialRole) {
+					setSelectedRole(initialRole);
+				}
+			}
+		} catch (err) {
+			console.error("Error loading boards:", err);
+			setError("Fehler beim Laden der Boards");
+		} finally {
+			setLoadingBoards(false);
+		}
+	};
+
+	// React Query for tasks
+	const {
+		data: tasksData,
+		isLoading: isLoadingTasks,
+		error: tasksError,
+	} = useQuery<TaskGroupsResponse>({
+		queryKey: ["tasks", selectedBoard?.id],
+		queryFn: async () => {
+			if (!selectedBoard) return [];
+			const params = new URLSearchParams({ boardId: selectedBoard.id });
+			// Add searchTerm if needed (e.g., from a search input, but not implemented here)
+			const response = await fetch(`/api/tasks?${params}`);
+			if (!response.ok) {
+				console.error(response);
+				throw new Error("Failed to fetch tasks");
+			}
+			return response.json();
+		},
+		enabled: !!selectedBoard,
+		staleTime: 5 * 60 * 1000, // 5 minutes
+		gcTime: 10 * 60 * 1000, // 10 minutes
+	});
+
+	// Update tasks state when query data changes
+	useEffect(() => {
+		if (tasksData) {
+			console.log("Fetched tasks data: ", JSON.stringify(tasksData));
+			const mappedTasks: DropdownGroupOption[] = tasksData.groups.map((group) => ({
+				label: group.label,
+				options: group.options.map((option) => ({
+					id: option.value, // Set id to value, as per existing pattern
+					value: option.value,
+					label: option.label,
+				})),
+			}));
+			setTasks(mappedTasks);
+			setLoadingTasks(false);
+			setError(null);
+
+			// Set initial task if provided
+			if (initialValues?.itemId && mappedTasks.length > 0) {
+				const initialTask = mappedTasks.flatMap((group) => group.options).find((task) => task.id === initialValues.itemId);
+				if (initialTask) {
+					setSelectedTask(initialTask);
+				}
+			}
+		}
+	}, [tasksData, initialValues?.itemId]);
+
+	// Handle errors from query
+	useEffect(() => {
+		if (tasksError) {
+			console.error("Error loading tasks:", tasksError);
+			setError("Fehler beim Laden der Aufgaben");
+			setTasks([]);
+			setLoadingTasks(false);
+		}
+	}, [tasksError]);
+
+	// Handle board selection
+	const handleBoardChange = useCallback(
+		async (option: DropdownOption | null) => {
+			setSelectedBoard(option);
+			setSelectedTask(null);
+			setTasksOptions([]);
+
+			console.log("Selected board:", option);
+			console.log("selectedBoard state:", selectedBoard);
+
+			if (option) {
+				// React Query will handle fetching automatically via enabled prop
+			} else {
+				setTasks([]);
+			}
+
+			onSelectionChange({
+				boardId: option?.id,
+				itemId: undefined,
+				role: selectedRole?.id,
+			});
+		},
+		[selectedRole, onSelectionChange]
+	);
+
+	// Handle task selection
+	const handleTaskChange = useCallback(
+		(option: DropdownOption | null) => {
+			// Prevent selection of loading placeholder items (if any remain)
+			if ((typeof option?.id === "string" && option.id.startsWith("loading-")) || option?.disabled) {
+				return;
+			}
+
+			setSelectedTask(option);
+
+			onSelectionChange({
+				boardId: selectedBoard?.id,
+				itemId: option?.id,
+				role: selectedRole?.id,
+			});
+		},
+		[selectedBoard, selectedRole, onSelectionChange]
+	);
+
+	// Handle role selection
+	const handleRoleChange = useCallback(
+		(option: DropdownOption | null) => {
+			setSelectedRole(option);
+
+			onSelectionChange({
+				boardId: selectedBoard?.id,
+				itemId: selectedTask?.id,
+				role: option?.id,
+			});
+		},
+		[selectedBoard, selectedTask, onSelectionChange]
+	);
+
+	const taskPlaceholder = isLoadingTasks ? "Lade Aufgaben..." : selectedBoard ? "Aufgabe auswählen..." : "Zuerst ein Board auswählen";
+
+	return (
+		<Flex
+			direction="column"
+			align="stretch"
+			gap="large"
+			style={{
+				width: "100%",
+			}}
+		>
+			{/* Error Display */}
+			{error && <Text style={{ color: "var(--negative-color)" }}>{error}</Text>}
+
+			{/* Board Selector */}
+			<label htmlFor="board-selector">Board auswählen</label>
+			<Select id="board-selector" className="dropdown dropdown-board" placeholder="Board auswählen..." options={boards} value={selectedBoard} onChange={handleBoardChange} isClearable isSearchable noOptionsMessage={() => "Keine Boards verfügbar"} aria-label="Board auswählen" />
+
+			{/* Task Selector - Now with groups */}
+			<label htmlFor="task-selector">Aufgabe auswählen</label>
+			<Select id="task-selector" className="dropdown dropdown-task" placeholder={taskPlaceholder} options={tasks} value={selectedTask} onChange={handleTaskChange} isClearable isSearchable={!isLoadingTasks} isDisabled={!selectedBoard || !tasks.length} noOptionsMessage={() => (!selectedBoard ? "Wählen Sie zuerst ein Board aus" : "Keine Aufgaben gefunden")} isLoading={isLoadingTasks} aria-label="Aufgabe auswählen" />
+
+			{/* Role Selector */}
+			<label htmlFor="role-selector">Rolle auswählen</label>
+			<Select id="role-selector" className="dropdown dropdown-role" placeholder="Rolle auswählen..." options={roles} value={selectedRole} onChange={handleRoleChange} isClearable isSearchable noOptionsMessage={() => "Keine Rollen verfügbar"} aria-label="Rolle auswählen" />
+		</Flex>
+	);
+}

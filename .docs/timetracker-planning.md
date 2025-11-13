@@ -45,3 +45,17 @@ The first version should offer a simple time tracking functionality with the fol
   - Allow logging time entries directly to monday.com subtasks
   - Allow user to select a role for time tracking (e.g., Developer, Designer, Manager)
   - Allow user to add comments or notes when logging time entries
+
+/app
+  /dashboard
+    - Main interface for time tracking
+  /item-view
+    - Sidebar or modal for detailed view of logged time entries
+  /api
+    - Endpoints for CRUD operations on time entries
+  /components
+    - Reusable UI components (buttons, forms, tables)
+  /lib
+    - Database connection and utility functions
+  /styles
+    - SCSS files for styling the application

@@ -1,25 +1,33 @@
-import { NextResponse } from "next/server";
-import { insertTimeEntry } from "@/lib/database";
+import { NextResponse } from 'next/server';
+import { getDraftEntry, insertDraftEntry, updateDraftEntry } from '@/lib/database';
 
 export async function POST(request: Request) {
-	try {
-		const { task_name, start_time, end_time, duration } = await request.json();
+  try {
+    const { comment, userId } = await request.json();
 
-		if (!task_name || !start_time || !end_time || duration === undefined) {
-			return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
-		}
+    // Validate required fields
+    if (!userId) {
+      return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+    }
 
-		const result = insertTimeEntry.run(task_name, start_time, end_time, duration);
+    // Check for existing draft
+    const existingDraft = await getDraftEntry();
 
-		return NextResponse.json({
-			id: result.lastInsertRowid,
-			task_name,
-			start_time,
-			end_time,
-			duration,
-		});
-	} catch (error) {
-		console.error("Error adding time entry:", error);
-		return NextResponse.json({ error: "Failed to add time entry" }, { status: 500 });
-	}
+    if (existingDraft) {
+      // Update existing draft with new comment
+      await updateDraftEntry(existingDraft.id, { comment });
+    } else {
+      // Create new draft entry
+      await insertDraftEntry({
+        user_id: userId,
+        comment,
+        // Other fields can be added here if needed (e.g., task_name defaults to "Draft")
+      });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error saving draft:', error);
+    return NextResponse.json({ error: 'Failed to save draft' }, { status: 500 });
+  }
 }

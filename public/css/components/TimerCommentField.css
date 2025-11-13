@@ -1,0 +1,12 @@
+.timer-comment-field-container {
+	.timer-comment-field-wrapper {
+		.timer-comment-field {
+			padding: var(--spacing-small) var(--spacing-medium) var(--spacing-small) var(--spacing-large);
+
+			& > div {
+				left: 4px;
+				right: unset;
+			}
+		}
+	}
+}

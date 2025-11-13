@@ -40,3 +40,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local vscode settings
+.vscode/*
+
+# local copilot settings
+.github/chatmodes/*

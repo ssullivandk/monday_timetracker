@@ -1,24 +1,55 @@
 {
-  "name": "timetracker",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
-  },
-  "dependencies": {
-    "better-sqlite3": "^12.4.1",
-    "next": "16.0.1",
-    "react": "19.2.0",
-    "react-dom": "19.2.0",
-    "sass": "^1.93.2"
-  },
-  "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "typescript": "^5"
-  }
+	"name": "timetracker",
+	"version": "0.1.0",
+	"private": true,
+	"scripts": {
+		"dev": "npm run services:start && concurrently \"next dev\" \"npm run expose\"",
+		"build": "next build",
+		"start": "next start",
+		"expose": "mapps tunnel:create -p 8301",
+		"stop": "kill-port 8301 && kill-port 4049 && kill-port 4040",
+		"services:start": "docker-compose up -d && supabase start",
+		"services:stop": "docker-compose down && supabase stop",
+		"services:restart": "npm run services:stop && npm run services:start",
+		"db:migrate": "supabase db push",
+		"db:reset": "supabase db reset",
+		"db:studio": "open http://localhost:54323",
+		"db:seed": "supabase db reset --db-only",
+		"redis:cli": "docker exec -it timetracker_redis redis-cli",
+		"redis:flush": "docker exec -it timetracker_redis redis-cli FLUSHALL",
+		"redis:gui": "open http://localhost:8081",
+		"supabase:status": "supabase status",
+		"supabase:logs": "supabase logs"
+	},
+	"dependencies": {
+		"@mondaydotcomorg/api": "^11.0.1",
+		"@supabase/ssr": "^0.7.0",
+		"@supabase/supabase-js": "^2.81.0",
+		"@tanstack/react-query": "^5.90.6",
+		"@vibe/core": "^3.73.0",
+		"axios": "^1.13.2",
+		"better-sqlite3": "^12.4.1",
+		"drizzle-orm": "^0.44.7",
+		"ioredis": "^5.8.2",
+		"monday-sdk-js": "^0.5.6",
+		"next": "16.0.1",
+		"react": "19.2.0",
+		"react-dom": "19.2.0",
+		"react-select": "^5.10.2",
+		"react-window": "^2.2.2",
+		"sass": "^1.93.3",
+		"use-debounce": "^10.0.6"
+	},
+	"devDependencies": {
+		"@types/better-sqlite3": "^7.6.13",
+		"@types/ioredis": "^4.28.10",
+		"@types/node": "^20.19.24",
+		"@types/react": "^19.2.2",
+		"@types/react-dom": "^19.2.2",
+		"concurrently": "^9.2.1",
+		"cross-port-killer": "^1.4.0",
+		"drizzle-kit": "^0.31.6",
+		"supabase": "^2.58.5",
+		"typescript": "^5.9.3"
+	}
 }

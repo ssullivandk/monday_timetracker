@@ -1,41 +1,406 @@
-import Database from "better-sqlite3";
-import path from "path";
+import { supabaseAdmin } from "@/lib/supabase/server";
+import { cacheHelper } from "@/lib/redis";
+import type { Database } from "@/types/database";
 
-// Database file path
-const dbPath = path.join(process.cwd(), "data", "timetracker.db");
+type TimeEntry = Database["public"]["Tables"]["time_entry"]["Row"];
+type TimeEntryInsert = Database["public"]["Tables"]["time_entry"]["Insert"];
+type TimeEntryUpdate = Database["public"]["Tables"]["time_entry"]["Update"];
+type TimerSession = Database["public"]["Tables"]["timer_session"]["Row"];
+type TimerSessionInsert = Database["public"]["Tables"]["timer_session"]["Insert"];
+type TimerSegmentInsert = Database["public"]["Tables"]["timer_segment"]["Insert"];
 
-// Initialize database
-const db = new Database(dbPath);
+const CACHE_TTL = 300; // 5 minutes
+const CACHE_PREFIX = "time_entry:";
 
-// Create time_entries table if it doesn't exist
-db.exec(`
-  CREATE TABLE IF NOT EXISTS time_entries (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    task_name TEXT NOT NULL,
-    start_time TEXT NOT NULL,
-    end_time TEXT NOT NULL,
-    duration INTEGER NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
-`);
+// Get all time entries
+export async function getAllTimeEntries(): Promise<TimeEntry[]> {
+	const cacheKey = `${CACHE_PREFIX}all`;
 
-// Prepare statements for database operations
-export const insertTimeEntry = db.prepare(`
-  INSERT INTO time_entries (task_name, start_time, end_time, duration)
-  VALUES (?, ?, ?, ?)
-`);
+	// Try cache first
+	const cached = await cacheHelper.get<TimeEntry[]>(cacheKey);
+	if (cached) {
+		console.log("✅ Cache hit: getAllTimeEntries");
+		return cached;
+	}
 
-export const getAllTimeEntries = db.prepare(`
-  SELECT * FROM time_entries 
-  ORDER BY created_at ASC
-`);
+	// Fetch from database
+	const { data, error } = await supabaseAdmin.from("time_entry").select("*").order("created_at", { ascending: true });
 
-export const getTimeEntryById = db.prepare(`
-  SELECT * FROM time_entries WHERE id = ?
-`);
+	if (error) {
+		console.error("Error fetching time entries:", error);
+		throw error;
+	}
 
-export const deleteTimeEntry = db.prepare(`
-  DELETE FROM time_entries WHERE id = ?
-`);
+	// Cache the result
+	await cacheHelper.set(cacheKey, data, CACHE_TTL);
+	console.log("💾 Cached: getAllTimeEntries");
 
-export default db;
+	return data;
+}
+
+// Get time entry by ID
+export async function getTimeEntryById(id: string): Promise<TimeEntry | null> {
+	const cacheKey = `${CACHE_PREFIX}${id}`;
+
+	// Try cache first
+	const cached = await cacheHelper.get<TimeEntry>(cacheKey);
+	if (cached) {
+		console.log(`✅ Cache hit: getTimeEntryById(${id})`);
+		return cached;
+	}
+
+	// Fetch from database
+	const { data, error } = await supabaseAdmin.from("time_entry").select("*").eq("id", id).single();
+
+	if (error) {
+		console.error(`Error fetching time entry ${id}:`, error);
+		return null;
+	}
+
+	// Cache the result
+	await cacheHelper.set(cacheKey, data, CACHE_TTL);
+
+	return data;
+}
+
+// Insert time entry
+export async function insertTimeEntry(entry: TimeEntryInsert): Promise<TimeEntry> {
+	// Make sure user_id is provided
+	if (!entry.user_id) {
+		throw new Error("user_id is required to create a time entry");
+	}
+
+	const { data, error } = await supabaseAdmin.from("time_entry").insert(entry).select().single();
+
+	if (error) {
+		console.error("Error inserting time entry:", error);
+		throw error;
+	}
+
+	// Invalidate cache
+	await cacheHelper.clearPattern(`${CACHE_PREFIX}*`);
+
+	return data;
+}
+
+// Insert draft entry
+export async function insertDraftEntry(entry: Partial<TimeEntryInsert>): Promise<TimeEntry> {
+	const { data, error } = await supabaseAdmin
+		.from("time_entry")
+		.insert({
+			...entry,
+			is_draft: true,
+			task_name: entry.task_name || "Draft",
+		} as TimeEntryInsert)
+		.select()
+		.single();
+
+	if (error) {
+		console.error("Error inserting draft entry:", error);
+		throw error;
+	}
+
+	// Invalidate cache
+	await cacheHelper.clearPattern(`${CACHE_PREFIX}*`);
+
+	return data;
+}
+
+// Update draft entry
+export async function updateDraftEntry(id: string, updates: TimeEntryUpdate): Promise<TimeEntry> {
+	const { data, error } = await supabaseAdmin.from("time_entry").update(updates).eq("id", id).eq("is_draft", true).select().single();
+
+	if (error) {
+		console.error(`Error updating draft entry ${id}:`, error);
+		throw error;
+	}
+
+	// Invalidate cache
+	await cacheHelper.del(`${CACHE_PREFIX}${id}`);
+	await cacheHelper.del(`${CACHE_PREFIX}all`);
+
+	return data;
+}
+
+// Delete time entry
+export async function deleteTimeEntry(id: string): Promise<void> {
+	const { error } = await supabaseAdmin.from("time_entry").delete().eq("id", id);
+
+	if (error) {
+		console.error(`Error deleting time entry ${id}:`, error);
+		throw error;
+	}
+
+	// Invalidate cache
+	await cacheHelper.del(`${CACHE_PREFIX}${id}`);
+	await cacheHelper.clearPattern(`${CACHE_PREFIX}*`);
+}
+
+// Delete draft entry
+export async function deleteDraftEntry(id: string): Promise<void> {
+	const { error } = await supabaseAdmin.from("time_entry").delete().eq("id", id).eq("is_draft", true);
+
+	if (error) {
+		console.error(`Error deleting draft entry ${id}:`, error);
+		throw error;
+	}
+
+	// Invalidate cache
+	await cacheHelper.del(`${CACHE_PREFIX}${id}`);
+	await cacheHelper.clearPattern(`${CACHE_PREFIX}*`);
+}
+
+// Get current draft entry
+export async function getDraftEntry(): Promise<TimeEntry | null> {
+	const { data, error } = await supabaseAdmin.from("time_entry").select("*").eq("is_draft", true).order("created_at", { ascending: false }).limit(1).single();
+
+	if (error && error.code !== "PGRST116") {
+		// PGRST116 = no rows returned
+		console.error("Error fetching draft entry:", error);
+		return null;
+	}
+
+	return data;
+}
+
+// Get time entries for a specific user
+export async function getUserTimeEntries(userId: string): Promise<TimeEntry[]> {
+	const cacheKey = `${CACHE_PREFIX}user:${userId}`;
+
+	// Try cache first
+	const cached = await cacheHelper.get<TimeEntry[]>(cacheKey);
+	if (cached) {
+		console.log(`✅ Cache hit: getUserTimeEntries(${userId})`);
+		return cached;
+	}
+
+	// Fetch from database
+	const { data, error } = await supabaseAdmin
+		.from("time_entry")
+		.select("*")
+		.eq("user_id", userId)
+		.order("created_at", { ascending: false });
+
+	if (error) {
+		console.error("Error fetching user time entries:", error);
+		throw error;
+	}
+
+	// Cache the result
+	await cacheHelper.set(cacheKey, data, CACHE_TTL);
+	console.log(`💾 Cached: getUserTimeEntries(${userId})`);
+
+	return data;
+}
+
+// Get current timer session
+export async function getCurrentTimerSession(userId: string): Promise<TimerSession | null> {
+	const { data, error } = await supabaseAdmin
+		.from("timer_session")
+		.select("*")
+		.eq("user_id", userId)
+		.or("is_running.eq.true,is_paused.eq.true")
+		.single();
+
+	if (error && error.code !== "PGRST116") {
+		console.error("Error fetching timer session:", error);
+		return null;
+	}
+
+	return data || null;
+}
+
+// Upsert timer session (insert if not exists, update if exists based on user_id and active state)
+export async function upsertTimerSession(sessionData: Partial<TimerSessionInsert>): Promise<TimerSession> {
+	if (!sessionData.user_id) {
+		throw new Error("user_id is required");
+	}
+
+	// Ensure required fields for insert
+	const insertData = {
+		user_id: sessionData.user_id,
+		start_time: sessionData.start_time || new Date().toISOString(),
+		elapsed_time: sessionData.elapsed_time || 0,
+		is_running: sessionData.is_running ?? false,
+		is_paused: sessionData.is_paused ?? false,
+		draft_id: sessionData.draft_id,
+	} as TimerSessionInsert;
+
+	const { data, error } = await supabaseAdmin
+		.from("timer_session")
+		.upsert(insertData, { onConflict: "user_id" })
+		.select()
+		.single();
+
+	if (error) {
+		console.error("Error upserting timer session:", error);
+		throw error;
+	}
+
+	return data;
+}
+
+// Clear timer session by deleting draft (cascades)
+export async function clearTimerSession(userId: string): Promise<void> {
+	const draft = await getDraftEntry(); // Assumes one draft per user; adjust filter by user_id if needed
+	if (draft && draft.user_id === userId) {
+		await deleteDraftEntry(draft.id);
+	}
+
+	// Invalidate timer-related caches (add prefix if needed)
+	await cacheHelper.clearPattern("timer:*");
+	await cacheHelper.clearPattern(`${CACHE_PREFIX}*`);
+}
+
+// Start timer: Create draft, session, and initial segment
+export async function startTimer(userId: string) {
+	if (!userId) {
+		throw new Error("user_id is required");
+	}
+
+	const now = new Date().toISOString();
+
+	try {
+		// Check for existing active session and clear if needed
+		const existingSession = await getCurrentTimerSession(userId);
+		if (existingSession) {
+			await clearTimerSession(userId);
+		}
+
+		// Create draft time_entry
+		const { data: draft, error: draftError } = await supabaseAdmin
+			.from("time_entry")
+			.insert({
+				user_id: userId,
+				is_draft: true,
+				start_time: now,
+			})
+			.select()
+			.single();
+
+		if (draftError) throw draftError;
+
+		// Create timer_session
+		const { data: session, error: sessionError } = await supabaseAdmin
+			.from("timer_session")
+			.insert({
+				user_id: userId,
+				draft_id: draft.id,
+				start_time: now,
+				is_running: true,
+				elapsed_time: 0,
+			})
+			.select()
+			.single();
+
+		if (sessionError) throw sessionError;
+
+		// Create initial running timer_segment
+		const { error: segmentError } = await supabaseAdmin
+			.from("timer_segment")
+			.insert({
+				session_id: session.id,
+				start_time: now,
+				is_running: true,
+			});
+
+		if (segmentError) throw segmentError;
+
+		return { draftId: draft.id, sessionId: session.id, session };
+	} catch (error) {
+		console.error("Error starting timer:", error);
+		throw error;
+	}
+}
+
+// Toggle pause/resume: Handle segments and session update
+export async function togglePause(userId: string, elapsedTime: number, isPausing: boolean) {
+	const session = await getCurrentTimerSession(userId);
+	if (!session) {
+		throw new Error("No active session found");
+	}
+
+	const now = new Date().toISOString();
+
+	try {
+		if (isPausing) {
+			// End current running segment
+			const { error: endRunningError } = await supabaseAdmin
+				.from("timer_segment")
+				.update({ end_time: now })
+				.eq("session_id", session.id)
+				.is("end_time", null)
+				.eq("is_running", true);
+
+			if (endRunningError) throw endRunningError;
+
+			// Create pause segment
+			await supabaseAdmin.from("timer_segment").insert({
+				session_id: session.id,
+				start_time: now,
+				is_pause: true,
+			});
+		} else {
+			// End current pause segment
+			const { error: endPauseError } = await supabaseAdmin
+				.from("timer_segment")
+				.update({ end_time: now })
+				.eq("session_id", session.id)
+				.is("end_time", null)
+				.eq("is_pause", true);
+
+			if (endPauseError) throw endPauseError;
+
+			// Create running segment
+			await supabaseAdmin.from("timer_segment").insert({
+				session_id: session.id,
+				start_time: now,
+				is_running: true,
+			});
+		}
+
+		// Update session
+		const { data: updatedSession, error: sessionError } = await supabaseAdmin
+			.from("timer_session")
+			.update({
+				is_running: !isPausing,
+				is_paused: isPausing,
+				elapsed_time: elapsedTime,
+			})
+			.eq("id", session.id)
+			.select()
+			.single();
+
+		if (sessionError) throw sessionError;
+
+		return updatedSession;
+	} catch (error) {
+		console.error("Error toggling pause:", error);
+		throw error;
+	}
+}
+
+// Reset timer: Delete draft (cascades to session and segments)
+export async function resetTimer(userId: string) {
+	const draft = await getDraftEntry(); // Filter by user if multiple users
+	if (!draft || draft.user_id !== userId) {
+		return { success: true }; // No draft to delete
+	}
+
+	const { error } = await supabaseAdmin
+		.from("time_entry")
+		.delete()
+		.eq("id", draft.id)
+		.eq("is_draft", true);
+
+	if (error) {
+		console.error("Error resetting timer:", error);
+		throw error;
+	}
+
+	// Invalidate related caches
+	await cacheHelper.clearPattern("timer:*");
+	await cacheHelper.clearPattern(`${CACHE_PREFIX}*`);
+
+	return { success: true };
+}
