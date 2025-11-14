@@ -1,35 +1,54 @@
-import { useEffect, useRef } from 'react';
-import axios from 'axios';
+import { useEffect, useRef, useState } from "react";
+import { supabase } from "@/lib/supabase/client";
 
 interface UseDraftAutoSaveProps {
-  comment: string;
-  userId: string;
+	comment: string;
+	userId: string;
+	enabled?: boolean;
 }
 
 export function useDraftAutoSave({ comment, userId }: UseDraftAutoSaveProps) {
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+	const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    // Clear any existing debounce timer
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
+	useEffect(() => {
+		if (debounceRef.current) clearTimeout(debounceRef.current);
 
-    // Set a new debounce timer for 500ms
-    debounceRef.current = setTimeout(async () => {
-      try {
-        // Call the API to save/update the draft
-        await axios.post('/api/time-entries/add', { comment, userId });
-      } catch (error) {
-        console.error('Error auto-saving draft:', error);
-      }
-    }, 500);
+		debounceRef.current = setTimeout(async () => {
+			try {
+				// Check for existing draft (but don't create if comment is empty and no draft exists)
+				const { data: existingDraft } = await supabase.from("time_entry").select("id").eq("user_id", userId).eq("is_draft", true).single();
 
-    // Cleanup: Clear timer on unmount or dependency change
-    return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-      }
-    };
-  }, [comment, userId]); // Re-run on comment or userId change
+				if (existingDraft) {
+					// Update existing draft
+					await supabase.from("time_entry").update({ comment }).eq("id", existingDraft.id);
+				} else if (comment.trim()) {
+					// Only create new draft if there's actual content
+					await supabase.from("time_entry").insert({
+						user_id: userId,
+						comment,
+						task_name: "Unbenannter Zeiteintrag",
+						start_time: new Date().toISOString(),
+						is_draft: true,
+					});
+				}
+			} catch (error) {
+				console.error("Error auto-saving draft:", error);
+			}
+		}, 500);
+
+		return () => {
+			if (debounceRef.current) clearTimeout(debounceRef.current);
+		};
+	}, [comment, userId]);
 }
+
+const useDraftCache = () => {
+	const [cache, setCache] = useState<Map<string, any>>(new Map());
+
+	const getCachedDraft = (userId: string) => cache.get(`draft_${userId}`);
+	const setCachedDraft = (userId: string, draft: any) => {
+		setCache((prev) => new Map(prev).set(`draft_${userId}`, draft));
+	};
+
+	return { getCachedDraft, setCachedDraft };
+};

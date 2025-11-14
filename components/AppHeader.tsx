@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { Logo } from "./Logo";
-import Timer from "@/components/Timer_alt";
+import Timer from "@/components/Timer";
 import ManualTimeEntryButton from "@/components/ManualTimeEntryButton";
 import ManualTimeEntryModal from "@/components/ManualTimeEntryModal";
 import { Flex } from "@vibe/core";

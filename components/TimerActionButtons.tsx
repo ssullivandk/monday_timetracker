@@ -1,3 +1,5 @@
+"use client";
+
 import { Button, Flex } from "@vibe/core";
 import { useTimerState } from "@/hooks/useTimerState";
 import Play from "@/components/icons/Play";

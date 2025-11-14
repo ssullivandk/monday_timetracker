@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { cacheHelper } from "@/lib/redis";
 import type { Database } from "@/types/database";
+import { useMondayContext } from "@/hooks/useMondayContext";
 
 type TimeEntry = Database["public"]["Tables"]["time_entry"]["Row"];
 type TimeEntryInsert = Database["public"]["Tables"]["time_entry"]["Insert"];
@@ -11,6 +12,8 @@ type TimerSegmentInsert = Database["public"]["Tables"]["timer_segment"]["Insert"
 
 const CACHE_TTL = 300; // 5 minutes
 const CACHE_PREFIX = "time_entry:";
+
+const { getUserId } = useMondayContext();
 
 // Get all time entries
 export async function getAllTimeEntries(): Promise<TimeEntry[]> {
@@ -82,46 +85,6 @@ export async function insertTimeEntry(entry: TimeEntryInsert): Promise<TimeEntry
 
 	return data;
 }
-
-// Insert draft entry
-export async function insertDraftEntry(entry: Partial<TimeEntryInsert>): Promise<TimeEntry> {
-	const { data, error } = await supabaseAdmin
-		.from("time_entry")
-		.insert({
-			...entry,
-			is_draft: true,
-			task_name: entry.task_name || "Draft",
-		} as TimeEntryInsert)
-		.select()
-		.single();
-
-	if (error) {
-		console.error("Error inserting draft entry:", error);
-		throw error;
-	}
-
-	// Invalidate cache
-	await cacheHelper.clearPattern(`${CACHE_PREFIX}*`);
-
-	return data;
-}
-
-// Update draft entry
-export async function updateDraftEntry(id: string, updates: TimeEntryUpdate): Promise<TimeEntry> {
-	const { data, error } = await supabaseAdmin.from("time_entry").update(updates).eq("id", id).eq("is_draft", true).select().single();
-
-	if (error) {
-		console.error(`Error updating draft entry ${id}:`, error);
-		throw error;
-	}
-
-	// Invalidate cache
-	await cacheHelper.del(`${CACHE_PREFIX}${id}`);
-	await cacheHelper.del(`${CACHE_PREFIX}all`);
-
-	return data;
-}
-
 // Delete time entry
 export async function deleteTimeEntry(id: string): Promise<void> {
 	const { error } = await supabaseAdmin.from("time_entry").delete().eq("id", id);
@@ -134,33 +97,6 @@ export async function deleteTimeEntry(id: string): Promise<void> {
 	// Invalidate cache
 	await cacheHelper.del(`${CACHE_PREFIX}${id}`);
 	await cacheHelper.clearPattern(`${CACHE_PREFIX}*`);
-}
-
-// Delete draft entry
-export async function deleteDraftEntry(id: string): Promise<void> {
-	const { error } = await supabaseAdmin.from("time_entry").delete().eq("id", id).eq("is_draft", true);
-
-	if (error) {
-		console.error(`Error deleting draft entry ${id}:`, error);
-		throw error;
-	}
-
-	// Invalidate cache
-	await cacheHelper.del(`${CACHE_PREFIX}${id}`);
-	await cacheHelper.clearPattern(`${CACHE_PREFIX}*`);
-}
-
-// Get current draft entry
-export async function getDraftEntry(): Promise<TimeEntry | null> {
-	const { data, error } = await supabaseAdmin.from("time_entry").select("*").eq("is_draft", true).order("created_at", { ascending: false }).limit(1).single();
-
-	if (error && error.code !== "PGRST116") {
-		// PGRST116 = no rows returned
-		console.error("Error fetching draft entry:", error);
-		return null;
-	}
-
-	return data;
 }
 
 // Get time entries for a specific user
@@ -242,14 +178,30 @@ export async function upsertTimerSession(sessionData: Partial<TimerSessionInsert
 
 // Clear timer session by deleting draft (cascades)
 export async function clearTimerSession(userId: string): Promise<void> {
-	const draft = await getDraftEntry(); // Assumes one draft per user; adjust filter by user_id if needed
-	if (draft && draft.user_id === userId) {
-		await deleteDraftEntry(draft.id);
-	}
+	const { data: draft } = await supabaseAdmin
+		.from("time_entry")
+		.select("id")
+		.eq("user_id", userId)
+		.eq("is_draft", true)
+		.order("created_at", { ascending: false })
+		.limit(1)
+		.single();
 
-	// Invalidate timer-related caches (add prefix if needed)
-	await cacheHelper.clearPattern("timer:*");
-	await cacheHelper.clearPattern(`${CACHE_PREFIX}*`);
+	if (draft) {
+		// Delete the draft (this cascades to timer_session and timer_segments)
+		const { error } = await supabaseAdmin
+			.from("time_entry")
+			.delete()
+			.eq("id", draft.id);
+
+		if (error) {
+			console.error(`Error clearing timer session for user ${userId}:`, error);
+			throw error;
+		}
+
+		// Invalidate cache
+		await cacheHelper.clearPattern(`${CACHE_PREFIX}*`);
+	}
 }
 
 // Start timer: Create draft, session, and initial segment
@@ -378,29 +330,4 @@ export async function togglePause(userId: string, elapsedTime: number, isPausing
 		console.error("Error toggling pause:", error);
 		throw error;
 	}
-}
-
-// Reset timer: Delete draft (cascades to session and segments)
-export async function resetTimer(userId: string) {
-	const draft = await getDraftEntry(); // Filter by user if multiple users
-	if (!draft || draft.user_id !== userId) {
-		return { success: true }; // No draft to delete
-	}
-
-	const { error } = await supabaseAdmin
-		.from("time_entry")
-		.delete()
-		.eq("id", draft.id)
-		.eq("is_draft", true);
-
-	if (error) {
-		console.error("Error resetting timer:", error);
-		throw error;
-	}
-
-	// Invalidate related caches
-	await cacheHelper.clearPattern("timer:*");
-	await cacheHelper.clearPattern(`${CACHE_PREFIX}*`);
-
-	return { success: true };
 }

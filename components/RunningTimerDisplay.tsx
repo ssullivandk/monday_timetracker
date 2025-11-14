@@ -7,7 +7,7 @@ import Reset from "@/components/icons/Reset";
 
 import "@/public/css/components/RunningTimerDisplay.css";
 
-export default function RunningTimerDisplay({ resetTimer, clearComment, isRunning, isPaused, elapsedTime, ...props }: { resetTimer: () => void; clearComment: () => void; isRunning: boolean; isPaused: boolean; elapsedTime: number }) {
+export default function RunningTimerDisplay({ resetTimer, clearComment, isRunning, isPaused, elapsedTime, ...props }) {
 	const handleTimerReset = () => {
 		console.log("Timer reset");
 		resetTimer();
