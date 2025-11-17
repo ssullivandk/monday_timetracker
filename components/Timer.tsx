@@ -12,10 +12,10 @@ import TimerCommentField from "@/components/TimerCommentField";
 import { supabase } from "@/lib/supabase/client";
 
 export default function Timer() {
-	const { elapsedTime, startTimer, pauseTimer, resetTimer, isRunning, isPaused, draftId } = useTimerState();
+	const { elapsedTime, startTimer, pauseTimer, resetTimer, softResetTimer, isRunning, isPaused, draftId, sessionId } = useTimerState();
 	const [initialComment, setInitialComment] = useState("");
 	const { clearComment, setComment, comment } = useCommentFieldState(initialComment);
-	const { saveDraft, isSaving } = useDraftManualSave(draftId, comment);
+	const { saveDraft, isSaving } = useDraftManualSave(comment);
 
 	// Load comment from existing draft when session loads
 	useEffect(() => {
@@ -50,7 +50,9 @@ export default function Timer() {
 	const handleSaveAsDraft = () => {
 		// Implement save as draft logic here
 		console.log("Save as draft clicked");
-		saveDraft();
+		saveDraft(draftId, sessionId).then(() => {
+			softResetTimer();
+		});
 	};
 
 	const handleSave = () => {

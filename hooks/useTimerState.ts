@@ -30,7 +30,7 @@ interface TimerState {
 	sessionId: string | null;
 }
 
-export function useTimerState(userId: string) {
+export function useTimerState() {
 	const { userProfile } = useMondayContext();
 	const { setComment } = useCommentFieldState();
 	const [state, setState] = useState<TimerState>({
@@ -235,6 +235,8 @@ export function useTimerState(userId: string) {
 
 			const data = await response.json();
 
+			console.log("Timer started data session:", data.session.id);
+
 			if (data.resumed) {
 				// Resumed existing session
 				setState({
@@ -245,6 +247,7 @@ export function useTimerState(userId: string) {
 					draftId: data.session.draft_id,
 					sessionId: data.session.id,
 				});
+				console.log("Timer resumed with existing session:", data.session.id);
 			} else {
 				// Created new session
 				setState((prev) => ({
@@ -256,6 +259,7 @@ export function useTimerState(userId: string) {
 					draftId: data.draft.id,
 					sessionId: data.session.id,
 				}));
+				console.log("Timer started with new session:", data.session.id);
 			}
 		} catch (err: any) {
 			console.error("Failed to start timer:", err);
@@ -380,6 +384,68 @@ export function useTimerState(userId: string) {
 		}
 	}, [userProfile, state.draftId, state.sessionId]);
 
+	// Soft reset timer: Delete session but keep draft
+	const softResetTimer = useCallback(async () => {
+		console.log("softResetTimer called");
+		if (!userProfile || !state.draftId || !state.sessionId) return;
+
+		try {
+			setError(null);
+
+			const draftIdTemp = state.draftId;
+			const sessionIdTemp = state.sessionId;
+
+			// Optimistic update
+			setState({
+				isRunning: false,
+				elapsedTime: 0,
+				startTime: null,
+				isPaused: false,
+				draftId: null,
+				sessionId: null,
+			});
+
+			// Call API to reset
+			const headers = await getMondayContextHeader();
+			const response = await fetch("/api/timer/soft-reset", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					...headers,
+				},
+				body: JSON.stringify({
+					draftId: draftIdTemp,
+					sessionId: sessionIdTemp,
+				}),
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.error || "Failed to reset timer");
+			}
+		} catch (err: any) {
+			console.error("Failed to reset timer:", err);
+			// Rollback on error (reload from API)
+			const headers = await getMondayContextHeader();
+			const response = await fetch("/api/timer/session", { headers });
+			if (response.ok) {
+				const data = await response.json();
+				const session = data.session;
+				if (session) {
+					setState({
+						isRunning: session.is_running,
+						elapsedTime: session.calculatedElapsedTime,
+						startTime: session.start_time,
+						isPaused: session.is_paused,
+						draftId: session.draft_id,
+						sessionId: session.id,
+					});
+				}
+			}
+			setError(err.message || "Failed to reset timer");
+		}
+	}, [userProfile, state.draftId, state.sessionId]);
+
 	return {
 		...state,
 		loading,
@@ -387,5 +453,6 @@ export function useTimerState(userId: string) {
 		startTimer,
 		pauseTimer,
 		resetTimer,
+		softResetTimer,
 	};
 }
