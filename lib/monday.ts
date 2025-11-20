@@ -5,11 +5,45 @@ import { NextRequest } from "next/server";
 type APIResponse<T> = {
 	loading: boolean;
 	error: APIError | null;
-	data: {
-		loading: boolean;
-		error: APIError | null;
-		data: T;
+	data: T;
+};
+
+// Type definition for BoardsResponse
+type BoardsResponse = {
+	boards: Array<{
+		id: string;
+		name: string;
+	}>;
+	error?: APIError;
+};
+
+type TasksResponseWithGroups = {
+	groups: Array<{
+		id: string;
+		title: string;
+		items_page: {
+			cursor: string | null;
+			items: Array<{
+				id: string;
+				name: string;
+				subitems: Array<{
+					id: string;
+					name: string;
+				}>;
+			}>;
+		};
+	}>;
+};
+
+// Type definition for TasksResponse
+type TasksResponse = {
+	boards: Array<{
+		groups: TasksResponseWithGroups["groups"];
+	}>;
+	complexity?: {
+		query: number;
 	};
+	error?: APIError;
 };
 
 type APIError = {
@@ -36,9 +70,12 @@ export async function getConnectedBoards(boardIds: string[]): Promise<Array<{ va
 		return [];
 	}
 
+	console.log("[getConnectedBoards - monday.ts] -----------------------------------");
+	console.log("Fetching connected boards for IDs:", boardIds);
+
 	const query = `
     query {
-      boards(ids: [${boardIds.join(",")}]) {
+      boards(ids: [${boardIds}]) {
         id
         name
       }
@@ -46,14 +83,17 @@ export async function getConnectedBoards(boardIds: string[]): Promise<Array<{ va
   `;
 
 	try {
-		const response: APIResponse<{ boards: Array<{ id: string; name: string }> }> = await client.request(query);
+		const response: BoardsResponse = await client.request(query);
 
-		if (response.error || response.data.error) {
-			console.error("Monday API error in getConnectedBoards:", response.error?.message || response.data.error?.message);
-			throw new Error(response.error?.message || response.data.error?.message || "Failed to fetch boards");
+		console.log("[getConnectedBoards - monday.ts] Response:", response);
+
+		if (response.error) {
+			console.error("Monday API error in getConnectedBoards:", response.error?.message);
+			console.log("[getConnectedBoards - monday.ts] Full response on error:", response);
+			throw new Error(response.error?.message || "Failed to fetch boards");
 		}
 
-		const boards = response.data.data.boards || [];
+		const boards = response.boards || [];
 		return boards.map((board) => ({
 			value: board.id.toString(),
 			label: board.name,
@@ -82,47 +122,33 @@ export async function getBoardTasks(
 		throw new Error("boardId must be a valid positive integer");
 	}
 
-	const allItems: any[] = [];
+	const itemsByGroup: Map<string, any[]> = new Map();
 	let cursor: string | null = null;
 	let hasMore = true;
 	let board: any = null;
 
+	console.log("[getBoardTasks - monday.ts] -----------------------------------");
+	console.log("Fetching connected boards for ID:", boardId);
+	console.log("boardId type:", typeof boardId);
+
 	while (hasMore) {
-		const query = `
-      query ($boardId: ID!, $cursor: String) {
-        boards(ids: [$boardId]) {
-          groups {
-            id
-            title
-            items_page(limit: 500, cursor: $cursor) {
-              cursor
-              items {
-                id
-                name
-                subitems {
-                  id
-                  name
-                }
-              }
-            }
-          }
-        }
-        complexity {
-          query
-        }
-      }
-    `;
+		const query = `query ($boardId: ID!, $cursor: String) {boards (ids: [$boardId]) {groups {id title items_page( limit: 500, cursor: $cursor ) {cursor items { id name subitems {id name} } } } } complexity { query } }`;
 
-		const variables: { boardId: string; cursor?: string | null } = { boardId, cursor };
-
+		const variables: { boardId: string; cursor?: string | null } = { boardId };
+		if (cursor) {
+			variables.cursor = cursor;
+		}
+		console.log("Query variables:", variables);
 		try {
-			const response: APIResponse<{ boards: any[] }> = await client.request(query, { variables });
+			const response: TasksResponse = await client.request(query, variables);
 
-			if (response.error || response.data.error) {
-				throw new Error(response.error?.message || response.data.error?.message);
+			if (response.error) {
+				throw new Error(response.error?.message || "Failed to fetch tasks");
 			}
 
-			board = response.data.data.boards[0];
+			board = response.boards[0];
+
+			console.log("Fetched board data:", board);
 
 			if (!board || !board.groups) {
 				break;
@@ -130,36 +156,14 @@ export async function getBoardTasks(
 
 			// Collect items from all groups across the board
 			for (const group of board.groups) {
-				let groupCursor = cursor;
-				let groupHasMore = true;
-
-				while (groupHasMore) {
-					const groupQueryVariables = { boardId, cursor: groupCursor };
-					const groupResponse: APIResponse<any> = await client.request(query, { variables: groupQueryVariables });
-
-					if (groupResponse.error || groupResponse.data.error) {
-						throw new Error(groupResponse.error?.message || groupResponse.data.error?.message);
-					}
-
-					const groupBoard = groupResponse.data.data.boards[0];
-					const groupItemsPage = groupBoard?.groups?.find((g) => g.id === group.id)?.items_page;
-
-					if (!groupItemsPage || !groupItemsPage.items) {
-						break;
-					}
-
-					allItems.push(...groupItemsPage.items);
-					groupCursor = groupItemsPage.cursor;
-					groupHasMore = !!groupCursor;
-
-					console.log(`Fetched ${groupItemsPage.items.length} items for group ${group.id}, complexity: ${groupResponse.data.data.complexity?.query}`);
+				if (group.items_page?.items) {
+					itemsByGroup.set(group.id, group.items_page.items);
 				}
 			}
 
-			// Pagination is per items_page, but since we're fetching all and original uses while(cursor), approximate by checking if any group has more
-			// For simplicity, fetch all in one go per group; adjust if needed for large boards
-			cursor = null; // Disable further pagination for now; original logic had issues with cursor per group
-			hasMore = false; // Set to false to avoid infinite loop; improve if search/pagination needed
+			// For now, fetch only once; pagination can be added later if needed
+			cursor = null;
+			hasMore = false;
 		} catch (error) {
 			if (error instanceof ClientError) {
 				console.error("ClientError in getBoardTasks:", error.response?.errors);
@@ -176,8 +180,8 @@ export async function getBoardTasks(
 
 	const groupedOptions = board.groups
 		.map((group: any) => {
-			// Use collected allItems to filter per group if needed; for now, assume allItems has all
-			const groupItems = allItems.filter((item) => item.group?.id === group.id || true); // Approximate
+			// Get items for this specific group
+			const groupItems = itemsByGroup.get(group.id) || [];
 			const options = groupItems.flatMap((item: any) => {
 				if (item.subitems && item.subitems.length > 0) {
 					return item.subitems.map((subitem: any) => ({

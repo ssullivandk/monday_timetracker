@@ -78,13 +78,21 @@ export function useTimerState() {
 						elapsedTime: session.calculatedElapsedTime,
 						startTime: session.start_time,
 						isPaused: session.is_paused,
-						draftId: session.draft_id,
+						draftId: session.time_entry?.id || null,
 						sessionId: session.id,
 					});
 
 					// Set the comment from the existing draft
 					if (session.time_entry?.comment) {
 						setComment(session.time_entry.comment);
+					}
+
+					// Set draftId separately in case time_entry is null
+					if (session.draft_id) {
+						setState((prev) => ({
+							...prev,
+							draftId: session.draft_id,
+						}));
 					}
 				} else {
 					console.log("No active timer session found");

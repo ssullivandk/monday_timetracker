@@ -11,8 +11,9 @@ import { Box, Flex } from "@vibe/core";
 import RunningTimerDisplay from "@/components/RunningTimerDisplay";
 import TimerActionButtons from "@/components/TimerActionButtons";
 import TimerCommentField from "@/components/TimerCommentField";
+import { is } from "drizzle-orm";
 
-export default function Timer() {
+export default function Timer({ onSave }: { onSave: () => void }) {
 	const refetch = useTimeEntriesRefetch();
 	const { getUserId } = useMondayContext();
 	const { elapsedTime, startTimer, pauseTimer, resetTimer, softResetTimer, isPaused, draftId, sessionId } = useTimerState();
@@ -32,6 +33,7 @@ export default function Timer() {
 	// Load comment from existing draft when session loads
 	useEffect(() => {
 		if (draftId) {
+			console.log("Loading comment for draftId:", draftId);
 			const loadComment = async () => {
 				const { data: draft } = await supabase.from("time_entry").select("comment").eq("id", draftId).single();
 
@@ -69,7 +71,11 @@ export default function Timer() {
 	};
 
 	const handleSave = () => {
-		// Implement full save logic (e.g., sync to monday.com)
+		if (!isPaused) {
+			pauseTimer();
+		}
+
+		onSave();
 	};
 
 	const handleReset = () => {

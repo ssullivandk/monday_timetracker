@@ -101,14 +101,14 @@ export async function deleteTimeEntry(id: string, userId: string): Promise<void>
 export async function getUserTimeEntries(userId: string): Promise<TimeEntry[]> {
 	console.log(`Fetching time entries for userId: ${userId}`);
 
-	const cacheKey = `${CACHE_PREFIX}user:${userId}`;
+	/* const cacheKey = `${CACHE_PREFIX}user:${userId}`;
 
 	// Try cache first
 	const cached = await cacheHelper.get<TimeEntry[]>(cacheKey);
 	if (cached) {
 		console.log(`✅ Cache hit: getUserTimeEntries(${userId})`);
 		return cached;
-	}
+	} */
 
 	// Fetch from database
 	const { data, error } = await supabaseAdmin.from("time_entry").select("*").eq("user_id", userId).order("created_at", { ascending: false });
@@ -120,8 +120,8 @@ export async function getUserTimeEntries(userId: string): Promise<TimeEntry[]> {
 	}
 
 	// Cache the result
-	await cacheHelper.set(cacheKey, data, CACHE_TTL);
-	console.log(`💾 Cached: getUserTimeEntries(${userId})`);
+	/* await cacheHelper.set(cacheKey, data, CACHE_TTL);
+	console.log(`💾 Cached: getUserTimeEntries(${userId})`); */
 
 	return data;
 }

@@ -14,9 +14,7 @@ export default function DashboardPage() {
 		<TimeEntriesProvider refetch={refetch}>
 			<div id="dashboard-app">
 				<AppHeader variant="dashboard" />
-				<main>
-					<TimeEntriesTable timeEntries={timeEntries} loading={loading} error={error} onRefetch={refetch} />
-				</main>
+				<TimeEntriesTable timeEntries={timeEntries} loading={loading} error={error} onRefetch={refetch} />
 			</div>
 		</TimeEntriesProvider>
 	);

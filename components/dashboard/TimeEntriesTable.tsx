@@ -29,10 +29,6 @@ export default function TimeEntriesTable({ timeEntries, loading, error, onRefetc
 			id: "task",
 			title: "Aufgabe",
 			loadingStateType: "medium-text",
-			width: {
-				max: 500,
-				min: 200,
-			},
 		},
 		{
 			id: "board",
@@ -43,19 +39,11 @@ export default function TimeEntriesTable({ timeEntries, loading, error, onRefetc
 			id: "job",
 			title: "Job",
 			loadingStateType: "medium-text",
-			width: {
-				max: 200,
-				min: 120,
-			},
 		},
 		{
 			id: "comment",
 			title: "Kommentar",
 			loadingStateType: "medium-text",
-			width: {
-				max: 300,
-				min: 100,
-			},
 		},
 		{
 			id: "date",
@@ -118,39 +106,35 @@ export default function TimeEntriesTable({ timeEntries, loading, error, onRefetc
 	}
 
 	return (
-		<div>
-			<Table columns={columns} emptyState={<h1 style={{ textAlign: "center" }}>Empty State</h1>} errorState={<h1 style={{ textAlign: "center" }}>Error State</h1>} id="time-entries-table">
-				<TableHeader>
-					<TableRow>
-						<TableHeaderCell title={<Checkbox checked={selectAllState.checked} indeterminate={selectAllState.indeterminate} onChange={(e) => handleSelectAll(e.target.checked)} ariaLabel="Alle Zeiteinträge auswählen" />} />
-						<TableHeaderCell title="Aufgabe" />
-						<TableHeaderCell title="Board" />
-						<TableHeaderCell title="Job" />
-						<TableHeaderCell title="Kommentar" />
-						<TableHeaderCell title="Datum" />
-						<TableHeaderCell title="Start" />
-						<TableHeaderCell title="Ende" />
-						<TableHeaderCell title="Gesamtzeit" />
+		<Table columns={columns} emptyState={<h1 style={{ textAlign: "center" }}>Empty State</h1>} errorState={<h1 style={{ textAlign: "center" }}>Error State</h1>} id="time-entries-table">
+			<TableHeader>
+				<TableHeaderCell title={<Checkbox checked={selectAllState.checked} indeterminate={selectAllState.indeterminate} onChange={(e) => handleSelectAll(e.target.checked)} ariaLabel="Alle Zeiteinträge auswählen" />} sticky />
+				<TableHeaderCell title="Aufgabe" sticky />
+				<TableHeaderCell title="Board" sticky />
+				<TableHeaderCell title="Job" sticky />
+				<TableHeaderCell title="Kommentar" sticky />
+				<TableHeaderCell title="Datum" sticky />
+				<TableHeaderCell title="Start" sticky />
+				<TableHeaderCell title="Ende" sticky />
+				<TableHeaderCell title="Gesamtzeit" sticky />
+			</TableHeader>
+			<TableBody>
+				{timeEntries.map((entry) => (
+					<TableRow key={entry.id} highlighted={selectedIds.includes(entry.id.toString())}>
+						<TableCell sticky>
+							<Checkbox checked={selectedIds.includes(entry.id.toString())} onChange={(e) => handleRowSelect(entry.id.toString(), e.target.checked)} ariaLabel={`Select time entry ${entry.id}`} />
+						</TableCell>
+						<TableCell sticky>{entry.task_name}</TableCell>
+						<TableCell>{entry.board_id || "-"}</TableCell>
+						<TableCell>{entry.role || "-"}</TableCell>
+						<TableCell>{entry.comment || "-"}</TableCell>
+						<TableCell>{new Date(entry.start_time).toLocaleDateString()}</TableCell>
+						<TableCell>{new Date(entry.start_time).toLocaleTimeString()}</TableCell>
+						<TableCell>{new Date(entry.end_time).toLocaleTimeString()}</TableCell>
+						<TableCell>{formatDuration(entry.duration)}</TableCell>
 					</TableRow>
-				</TableHeader>
-				<TableBody>
-					{timeEntries.map((entry) => (
-						<TableRow key={entry.id} highlighted={selectedIds.includes(entry.id.toString())}>
-							<TableCell>
-								<Checkbox checked={selectedIds.includes(entry.id.toString())} onChange={(e) => handleRowSelect(entry.id.toString(), e.target.checked)} ariaLabel={`Select time entry ${entry.id}`} />
-							</TableCell>
-							<TableCell>{entry.task_name}</TableCell>
-							<TableCell>{entry.board_id || "-"}</TableCell>
-							<TableCell>{entry.role || "-"}</TableCell>
-							<TableCell>{entry.comment || "-"}</TableCell>
-							<TableCell>{new Date(entry.start_time).toLocaleDateString()}</TableCell>
-							<TableCell>{new Date(entry.start_time).toLocaleTimeString()}</TableCell>
-							<TableCell>{new Date(entry.end_time).toLocaleTimeString()}</TableCell>
-							<TableCell>{formatDuration(entry.duration)}</TableCell>
-						</TableRow>
-					))}
-				</TableBody>
-			</Table>
-		</div>
+				))}
+			</TableBody>
+		</Table>
 	);
 }

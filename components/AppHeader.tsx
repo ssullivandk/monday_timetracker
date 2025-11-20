@@ -1,21 +1,33 @@
 import { useCallback, useState } from "react";
+import dynamic from "next/dynamic";
 import { Logo } from "./Logo";
 import Timer from "@/components/Timer";
 import ManualTimeEntryButton from "@/components/ManualTimeEntryButton";
-import ManualTimeEntryModal from "@/components/ManualTimeEntryModal";
 import { Flex } from "@vibe/core";
+
+const ManualTimeEntryModal = dynamic(() => import("./ManualTimeEntryModal"), { ssr: false });
+const SaveTimerModal = dynamic(() => import("./dashboard/SaveTimerModal"), { ssr: false });
 
 import "@/public/css/components/AppHeader.css";
 
 export default function AppHeader(variant?) {
-	const [show, setShow] = useState(false);
+	const [showManualSaveModal, setShowManualSaveModal] = useState(false);
+	const [showTimerSaveModal, setShowTimerSaveModal] = useState(false);
 
 	const handleManualTimeModalOpen = useCallback(() => {
-		setShow(true);
+		setShowManualSaveModal(true);
 	}, []);
 
 	const handleManualTimeModalClose = useCallback(() => {
-		setShow(false);
+		setShowManualSaveModal(false);
+	}, []);
+
+	const handleTimerSaveModalOpen = useCallback(() => {
+		setShowTimerSaveModal(true);
+	}, []);
+
+	const handleTimerSaveModalClose = useCallback(() => {
+		setShowTimerSaveModal(false);
 	}, []);
 
 	return (
@@ -29,9 +41,10 @@ export default function AppHeader(variant?) {
 						}}
 					/>
 				</Flex>
-				<Timer />
+				<Timer onSave={handleTimerSaveModalOpen} />
 			</header>
-			<ManualTimeEntryModal show={show} onClose={handleManualTimeModalClose} />
+			<ManualTimeEntryModal show={showManualSaveModal} onClose={handleManualTimeModalClose} />
+			<SaveTimerModal show={showTimerSaveModal} onClose={handleTimerSaveModalClose} />
 		</>
 	);
 }

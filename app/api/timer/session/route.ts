@@ -16,8 +16,12 @@ export async function GET(request: NextRequest) {
 			.from("timer_session")
 			.select(
 				`
-				*,
+				id,
+				elapsed_time,
+				is_paused,
+				created_at,
 				time_entry!draft_id (
+					id,
 					comment
 				)
 			`

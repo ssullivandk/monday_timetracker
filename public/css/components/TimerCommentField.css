@@ -1,11 +1,11 @@
 .timer-comment-field-container {
 	.timer-comment-field-wrapper {
 		.timer-comment-field {
-			padding: var(--spacing-small) var(--spacing-medium) var(--spacing-small) var(--spacing-large);
+			width: clamp(150px, 20vw, 300px);
+			transition: width 0.3s ease;
 
-			& > div {
-				left: 4px;
-				right: unset;
+			&.focus {
+				width: clamp(200px, 50vw, 600px);
 			}
 		}
 	}

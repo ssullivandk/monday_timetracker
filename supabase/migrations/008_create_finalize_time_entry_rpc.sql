@@ -1,9 +1,10 @@
--- Create or replace the finalize_draft RPC function (revised)
+-- Migration: Create finalize_time_entry RPC function
+-- Finalizes a draft time entry as a final time entry (is_draft = false)
 -- Computes total duration excluding pause segments (net billable running time)
 -- Snapshots ALL segments (incl pauses) for history
 -- Duration unit: seconds (integer); EXTRACT(epoch FROM interval)
 
-CREATE OR REPLACE FUNCTION finalize_draft(
+CREATE OR REPLACE FUNCTION finalize_time_entry(
   p_user_id uuid,
   p_draft_id uuid,
   p_task_name text,
@@ -56,13 +57,14 @@ BEGIN
   WHERE id = v_session.id
   RETURNING * INTO v_updated_session;
 
-  -- Step 5: Update time_entry (keep is_draft=true per current hook behavior)
+  -- Step 5: Update time_entry as FINAL entry (is_draft = false)
   UPDATE time_entry
   SET
     task_name = p_task_name,
     end_time = now(),
     duration = v_total_duration::integer,  -- seconds
     comment = p_comment,
+    is_draft = false,  -- This is the key difference: mark as final
     timer_session = to_jsonb(v_updated_session)
   WHERE id = p_draft_id
   RETURNING * INTO v_updated_entry;

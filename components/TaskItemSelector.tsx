@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { Flex, Text } from "@vibe/core";
 import Select from "react-select";
-import mondaySdk from "monday-sdk-js";
 import { useQuery } from "@tanstack/react-query";
+import { useMondayContext } from "@/hooks/useMondayContext";
 
 // Type definitions for monday.com API responses
 type APIError = {
@@ -69,6 +69,7 @@ export default function TaskItemSelector({ onSelectionChange, onResetRef, initia
 	const [loadingBoards, setLoadingBoards] = useState(false);
 	const [loadingTasks, setLoadingTasks] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const { rawContext } = useMondayContext();
 
 	// Reset functions
 	const resetBoard = useCallback(() => {
@@ -130,32 +131,29 @@ export default function TaskItemSelector({ onSelectionChange, onResetRef, initia
 
 	// Load connected boards on mount (client-side only)
 	useEffect(() => {
-		loadBoards();
-	}, []);
+		if (rawContext) {
+			console.log("Raw context in TaskItemSelector: ", rawContext);
+			loadBoards();
+		}
+	}, [rawContext]);
 
 	// Load boards function
 	const loadBoards = async () => {
 		if (typeof window === "undefined") return;
+		if (!rawContext) return; // Wait for context to load
 
 		setLoadingBoards(true);
 		setError(null);
 
 		try {
-			const monday = mondaySdk();
-			const contextResponse = await monday.get("context");
-
-			if (!(contextResponse.data as any)?.boardIds) {
-				setError("Keine verbundenen Boards gefunden");
-				return;
-			}
-
-			console.log("Context response: ", contextResponse);
-			const boardIds = (contextResponse.data as any).boardIds;
+			const boardIds = rawContext.data?.boardIds;
 
 			if (!boardIds || boardIds.length === 0) {
 				setBoards([]);
 				return;
 			}
+
+			console.log("Fetching boards for IDs: ", boardIds);
 
 			const response = await fetch("/api/connectedBoards", {
 				method: "POST",
@@ -339,15 +337,62 @@ export default function TaskItemSelector({ onSelectionChange, onResetRef, initia
 
 			{/* Board Selector */}
 			<label htmlFor="board-selector">Board auswählen</label>
-			<Select id="board-selector" className="dropdown dropdown-board" placeholder="Board auswählen..." options={boards} value={selectedBoard} onChange={handleBoardChange} isClearable isSearchable noOptionsMessage={() => "Keine Boards verfügbar"} aria-label="Board auswählen" />
+			<Select
+				id="board-selector"
+				className="dropdown dropdown-board"
+				placeholder="Board auswählen..."
+				options={boards}
+				value={selectedBoard}
+				onChange={handleBoardChange}
+				isClearable
+				isSearchable
+				noOptionsMessage={() => "Keine Boards verfügbar"}
+				aria-label="Board auswählen"
+				menuPortalTarget={document.getElementById("save-timer-modal-outer") || undefined}
+				styles={{
+					menuPortal: (base) => ({ ...base, zIndex: 10000 }),
+				}}
+			/>
 
 			{/* Task Selector - Now with groups */}
 			<label htmlFor="task-selector">Aufgabe auswählen</label>
-			<Select id="task-selector" className="dropdown dropdown-task" placeholder={taskPlaceholder} options={tasks} value={selectedTask} onChange={handleTaskChange} isClearable isSearchable={!isLoadingTasks} isDisabled={!selectedBoard || !tasks.length} noOptionsMessage={() => (!selectedBoard ? "Wählen Sie zuerst ein Board aus" : "Keine Aufgaben gefunden")} isLoading={isLoadingTasks} aria-label="Aufgabe auswählen" />
+			<Select
+				id="task-selector"
+				className="dropdown dropdown-task"
+				placeholder={taskPlaceholder}
+				options={tasks}
+				value={selectedTask}
+				onChange={handleTaskChange}
+				isClearable
+				isSearchable={!isLoadingTasks}
+				isDisabled={!selectedBoard || !tasks.length}
+				noOptionsMessage={() => (!selectedBoard ? "Wählen Sie zuerst ein Board aus" : "Keine Aufgaben gefunden")}
+				isLoading={isLoadingTasks}
+				aria-label="Aufgabe auswählen"
+				menuPortalTarget={document.getElementById("save-timer-modal-outer") || undefined}
+				styles={{
+					menuPortal: (base) => ({ ...base, zIndex: 10000 }),
+				}}
+			/>
 
 			{/* Role Selector */}
 			<label htmlFor="role-selector">Rolle auswählen</label>
-			<Select id="role-selector" className="dropdown dropdown-role" placeholder="Rolle auswählen..." options={roles} value={selectedRole} onChange={handleRoleChange} isClearable isSearchable noOptionsMessage={() => "Keine Rollen verfügbar"} aria-label="Rolle auswählen" />
+			<Select
+				id="role-selector"
+				className="dropdown dropdown-role"
+				placeholder="Rolle auswählen..."
+				options={roles}
+				value={selectedRole}
+				onChange={handleRoleChange}
+				isClearable
+				isSearchable
+				noOptionsMessage={() => "Keine Rollen verfügbar"}
+				aria-label="Rolle auswählen"
+				menuPortalTarget={document.getElementById("save-timer-modal-outer") || undefined}
+				styles={{
+					menuPortal: (base) => ({ ...base, zIndex: 10000 }),
+				}}
+			/>
 		</Flex>
 	);
 }

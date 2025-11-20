@@ -227,6 +227,15 @@ export type Database = {
         Returns: Json
       }
       finalize_segment: { Args: { p_session_id: string }; Returns: Json }
+      finalize_time_entry: {
+        Args: {
+          p_comment: string
+          p_draft_id: string
+          p_task_name: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
