@@ -353,7 +353,7 @@ export default function TaskItemSelector({ onSelectionChange, onResetRef, initia
 				aria-label="Board auswählen"
 				menuPortalTarget={document.getElementById("save-timer-modal-outer") || undefined}
 				styles={{
-					menuPortal: (base) => ({ ...base, zIndex: 10000 }),
+					menuPortal: (base) => ({ ...base, zIndex: 10001 }),
 				}}
 			/>
 
@@ -374,7 +374,7 @@ export default function TaskItemSelector({ onSelectionChange, onResetRef, initia
 				aria-label="Aufgabe auswählen"
 				menuPortalTarget={document.getElementById("save-timer-modal-outer") || undefined}
 				styles={{
-					menuPortal: (base) => ({ ...base, zIndex: 10000 }),
+					menuPortal: (base) => ({ ...base, zIndex: 9999 }),
 				}}
 			/>
 
@@ -393,7 +393,7 @@ export default function TaskItemSelector({ onSelectionChange, onResetRef, initia
 				aria-label="Rolle auswählen"
 				menuPortalTarget={document.getElementById("save-timer-modal-outer") || undefined}
 				styles={{
-					menuPortal: (base) => ({ ...base, zIndex: 10000 }),
+					menuPortal: (base) => ({ ...base, zIndex: 9999 }),
 				}}
 			/>
 		</Flex>

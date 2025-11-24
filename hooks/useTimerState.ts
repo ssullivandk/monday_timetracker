@@ -59,6 +59,7 @@ export function useTimerStateSSR() {
 		}
 
 		const loadTimerSession = async () => {
+			console.log("Loading timer session for user:", userProfile.id);
 			try {
 				setLoading(true);
 				setError(null);

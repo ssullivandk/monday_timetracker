@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
 import { Toast } from "@vibe/core";
 
-import "@/public/css/components/toast.css";
+import "@/public/css/components/Toast.css";
 
 export type ToastType = "normal" | "positive" | "negative" | "warning" | "dark";
 

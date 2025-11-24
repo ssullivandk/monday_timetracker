@@ -175,7 +175,7 @@ export const useTimerStore = create<TimerState>()(
 				}
 			},
 
-			resetTimer: async (mondayContext: any) => {
+			resetTimer: async (sessionData: { userId: string; draftId: string; sessionId: string }) => {
 				console.log("resetTimer called");
 				const user = useUserStore.getState().supabaseUser;
 				if (!user || !get().draftId || !get().sessionId) return;
@@ -196,17 +196,13 @@ export const useTimerStore = create<TimerState>()(
 						error: null,
 					});
 
-					const headers = { "monday-context": JSON.stringify(mondayContext) };
+					const headers = { "user-id": sessionData.userId, "session-id": sessionData.sessionId, "draft-id": sessionData.draftId };
 					const response = await fetch("/api/timer/reset", {
 						method: "POST",
 						headers: {
 							"Content-Type": "application/json",
 							...headers,
 						},
-						body: JSON.stringify({
-							draftId: draftIdTemp,
-							sessionId: sessionIdTemp,
-						}),
 					});
 
 					if (!response.ok) {

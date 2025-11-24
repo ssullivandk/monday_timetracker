@@ -8,6 +8,7 @@ import { Modal, ModalBasicLayout, ModalHeader, ModalContent, ModalFooter } from 
 import TaskItemSelector from "../TaskItemSelector";
 import { useTimerStore } from "@/stores/timerStore";
 import { useUserStore } from "@/stores/userStore";
+import { useTimeEntriesStore } from "@/stores/timeEntriesStore";
 import { useToast } from "@/components/ToastProvider";
 import { supabase } from "@/lib/supabase/client";
 import mondaySdk from "monday-sdk-js";
@@ -27,6 +28,7 @@ export default function SaveTimerModal({ show, onClose }: SaveTimerModalProps) {
 	} | null>(null);
 	const [isSaving, setIsSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const { refetch } = useTimeEntriesStore((s) => s);
 
 	const { showToast } = useToast();
 	const userProfile = useUserStore((state) => state.supabaseUser);
@@ -75,6 +77,7 @@ export default function SaveTimerModal({ show, onClose }: SaveTimerModalProps) {
 			showToast("Fehler beim Speichern", "negative", 2000);
 		} finally {
 			setIsSaving(false);
+			refetch(userProfile?.id);
 		}
 	};
 
@@ -83,7 +86,8 @@ export default function SaveTimerModal({ show, onClose }: SaveTimerModalProps) {
 	};
 
 	return (
-		<Flex id="save-timer-modal-outer">
+		<div id="save-timer-modal-outer">
+			<div id="modal-portal"></div>
 			<Modal id="save-timer-modal" show={show} onClose={onClose} container={document.getElementById("save-timer-modal-outer") || undefined}>
 				<ModalBasicLayout>
 					<ModalHeader title={"Save Timer"} />
@@ -118,6 +122,6 @@ export default function SaveTimerModal({ show, onClose }: SaveTimerModalProps) {
 					}}
 				/>
 			</Modal>
-		</Flex>
+		</div>
 	);
 }

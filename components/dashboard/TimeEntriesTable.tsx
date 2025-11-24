@@ -101,13 +101,13 @@ export default function TimeEntriesTable({ onRefetch }: TimeEntriesTableProps) {
 		}
 	};
 
-	/* if (loading) {
+	if (loading) {
 		return <div>Loading time entries...</div>;
 	}
 
 	if (error) {
 		return <div>Error: {error}</div>;
-	} */
+	}
 
 	return (
 		<Table columns={columns} emptyState={<h1 style={{ textAlign: "center" }}>Empty State</h1>} errorState={<h1 style={{ textAlign: "center" }}>Error State</h1>} id="time-entries-table">

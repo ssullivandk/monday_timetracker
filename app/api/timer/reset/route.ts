@@ -1,30 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getMondayContext } from "@/lib/monday";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
 export async function POST(request: NextRequest) {
 	try {
-		// Authenticate user
-		const context = await getMondayContext(request);
-		if (!context?.user?.id) {
-			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+		// Get headers
+		const userIdHeader = request.headers.get("user-id");
+		if (!userIdHeader) {
+			return NextResponse.json({ error: "Missing user-id header" }, { status: 400 });
 		}
-		const { data: userId } = await supabaseAdmin.from("user_profiles").select("id").eq("monday_user_id", context.user.id).single();
 
-		const body = await request.json();
-		const { draftId, sessionId } = body;
-
-		if (!draftId || !sessionId) {
-			return NextResponse.json({ error: "draftId and sessionId are required" }, { status: 400 });
+		const draftIdHeader = request.headers.get("draft-id");
+		if (!draftIdHeader) {
+			return NextResponse.json({ error: "Missing draft-id header" }, { status: 400 });
 		}
+
+		const sessionIdHeader = request.headers.get("session-id");
+		if (!sessionIdHeader) {
+			return NextResponse.json({ error: "Missing session-id header" }, { status: 400 });
+		}
+
+		console.log("Resetting timer for user:", userIdHeader, "draft:", draftIdHeader, "session:", sessionIdHeader);
 
 		// Delete timer_session first (cascades to timer_segments)
-		const { error: sessionError } = await supabaseAdmin.from("timer_session").delete().eq("id", sessionId).eq("user_id", userId.id);
+		const { error: sessionError } = await supabaseAdmin.from("timer_session").delete().eq("id", sessionIdHeader).eq("user_id", userIdHeader);
 
 		if (sessionError) throw sessionError;
 
 		// Then delete draft time_entry
-		const { error: draftError } = await supabaseAdmin.from("time_entry").delete().eq("id", draftId).eq("user_id", userId.id);
+		const { error: draftError } = await supabaseAdmin.from("time_entry").delete().eq("id", draftIdHeader).eq("user_id", userIdHeader);
 
 		if (draftError) throw draftError;
 

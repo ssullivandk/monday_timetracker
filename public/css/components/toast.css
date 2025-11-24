@@ -10,7 +10,7 @@
 	box-shadow: var(--box-shadow-medium); */
 
 	&.toast-positive {
-		background-color: var(--color--background-success);
+		background-color: var(--color--success-dark);
 		color: var(--color--text-on-primary);
 	}
 }
