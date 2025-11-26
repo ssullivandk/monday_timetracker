@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMondayContext } from "@/lib/monday";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import type { GetTimerSessionWithElapsedResult } from "@/types/database";
 
 export async function GET(request: NextRequest) {
 	try {
@@ -11,51 +12,38 @@ export async function GET(request: NextRequest) {
 		}
 		const { data: userId } = await supabaseAdmin.from("user_profiles").select("id").eq("monday_user_id", context.user.id).single();
 
-		// Fetch active or paused session for the user
-		const { data: session, error: sessionError } = await supabaseAdmin
-			.from("timer_session")
-			.select(
-				`
-				id,
-				elapsed_time,
-				is_paused,
-				created_at,
-				time_entry!draft_id (
-					id,
-					comment
-				)
-			`
-			)
-			.eq("user_id", userId.id)
-			.single();
-
-		if (sessionError && sessionError.code !== "PGRST116") {
-			throw sessionError;
+		if (!userId) {
+			return NextResponse.json({ error: "User not found" }, { status: 404 });
 		}
 
-		if (session) {
-			let calculatedElapsedTime = session.elapsed_time;
+		// Use the RPC function to get session with elapsed time calculated server-side
+		// This avoids clock drift issues between app server and database
+		const { data: result, error: rpcError } = await supabaseAdmin.rpc("get_timer_session_with_elapsed", {
+			p_user_id: userId.id,
+		});
 
-			// If timer is currently running, calculate real elapsed time
-			if (session.id && !session.is_paused) {
-				const { data: currentSegment } = await supabaseAdmin.from("timer_segment").select("start_time").eq("session_id", session.id).is("end_time", null).order("start_time", { ascending: false }).limit(1).single();
+		if (rpcError) {
+			console.error("Error calling get_timer_session_with_elapsed:", rpcError);
+			throw rpcError;
+		}
 
-				if (currentSegment) {
-					const segmentStartTime = new Date(currentSegment.start_time).getTime();
-					const now = Date.now();
-					const additionalTime = now - segmentStartTime;
-					calculatedElapsedTime = session.elapsed_time + additionalTime;
-				}
-			}
+		// Cast to proper type
+		const typedResult = result as unknown as GetTimerSessionWithElapsedResult;
 
+		if (typedResult?.session) {
 			return NextResponse.json({
 				session: {
-					...session,
-					calculatedElapsedTime,
+					...typedResult.session,
+					// Use the server-calculated elapsed time
+					calculatedElapsedTime: typedResult.calculated_elapsed_time_ms,
 				},
+				serverTime: typedResult.server_time,
 			});
 		} else {
-			return NextResponse.json({ session: null });
+			return NextResponse.json({
+				session: null,
+				serverTime: typedResult?.server_time || new Date().toISOString(),
+			});
 		}
 	} catch (error) {
 		console.error("Error loading timer session:", error);

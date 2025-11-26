@@ -8,28 +8,16 @@ import { useQuery } from "@tanstack/react-query";
 import { useMondayStore } from "@/stores/mondayStore";
 import { supabase } from "@/lib/supabase/client";
 
-// Type definitions for monday.com API responses
-type APIError = {
-	message: string;
-	status: number;
-	errors?: Array<{
-		message: string;
-		path?: string[];
-	}>;
-};
-
-type APIResponse<T> = {
-	loading: boolean;
-	error: APIError | null;
-	data: {
-		loading: boolean;
-		error: APIError | null;
-		data: T;
-	};
-};
+// Selection data type passed to parent
+export interface TaskSelection {
+	boardId?: string;
+	itemId?: string;
+	itemName?: string;
+	role?: string;
+}
 
 interface TaskItemSelectorProps {
-	onSelectionChange: (data: { boardId?: string; itemId?: string; role?: string }) => void;
+	onSelectionChange: (data: TaskSelection) => void;
 	onResetRef?: (resetFn: () => void) => void;
 	initialValues?: {
 		boardId?: string;
@@ -42,6 +30,7 @@ type DropdownOption = {
 	id: string;
 	value: string;
 	label: string;
+	disabled?: boolean;
 	[key: string]: unknown;
 };
 
@@ -61,18 +50,14 @@ type TaskGroupsResponse = {
 };
 
 export default function TaskItemSelector({ onSelectionChange, onResetRef, initialValues }: TaskItemSelectorProps) {
-	// State management
-	const [boards, setBoards] = useState<DropdownOption[]>([]);
+	// State management for selections
 	const [tasks, setTasks] = useState<DropdownGroupOption[]>([]);
-	const [tasksOptions, setTasksOptions] = useState<DropdownOption[]>([]);
 	const [selectedBoard, setSelectedBoard] = useState<DropdownOption | null>(null);
 	const [selectedTask, setSelectedTask] = useState<DropdownOption | null>(null);
 	const [selectedRole, setSelectedRole] = useState<DropdownOption | null>(null);
-	const [loadingBoards, setLoadingBoards] = useState(false);
-	const [loadingTasks, setLoadingTasks] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	// Use mondayStore instead of hook
+	// Use mondayStore for context
 	const { rawContext } = useMondayStore();
 
 	// Reset functions
@@ -97,9 +82,10 @@ export default function TaskItemSelector({ onSelectionChange, onResetRef, initia
 		onSelectionChange({
 			boardId: undefined,
 			itemId: undefined,
+			itemName: undefined,
 			role: undefined,
 		});
-	}, [onSelectionChange]);
+	}, [onSelectionChange, resetBoard, resetTask, resetRole]);
 
 	// Provide reset function to parent via callback
 	useEffect(() => {
@@ -108,55 +94,16 @@ export default function TaskItemSelector({ onSelectionChange, onResetRef, initia
 		}
 	}, [onResetRef, resetSelections]);
 
-	// Fetch role options from Supabase
-	const fetchRoles = async () => {
-		const { data, error } = await supabase.from("role").select("*");
-		if (error) {
-			console.error("Error fetching roles from Supabase:", error);
-			return [];
-		}
-		return data.map((role) => ({
-			label: role.name,
-			id: role.id,
-			value: role.id,
-		}));
-	};
-
-	// Role options (German)
-	const [roles, setRoles] = useState<DropdownOption[]>([]);
-	useEffect(() => {
-		const loadRoles = async () => {
-			const fetchedRoles = await fetchRoles();
-			setRoles(fetchedRoles);
-		};
-		loadRoles();
-	}, []);
-
-	// Load connected boards on mount (client-side only)
-	useEffect(() => {
-		if (rawContext) {
-			console.log("Raw context in TaskItemSelector: ", rawContext);
-			loadBoards();
-		}
-	}, [rawContext]);
-
-	// Load boards function
-	const loadBoards = async () => {
-		if (typeof window === "undefined") return;
-		if (!rawContext) return; // Wait for context to load
-
-		setLoadingBoards(true);
-		setError(null);
-
-		try {
-			const boardIds = rawContext.data?.boardIds;
-
-			if (!boardIds || boardIds.length === 0) {
-				setBoards([]);
-				return;
-			}
-
-			console.log("Fetching boards for IDs: ", boardIds);
+	// Boards query using React Query
+	const boardIds = rawContext?.data?.boardIds;
+	const {
+		data: boards = [],
+		isLoading: loadingBoards,
+		error: boardsError,
+	} = useQuery({
+		queryKey: ["boards", boardIds],
+		queryFn: async () => {
+			if (!boardIds || boardIds.length === 0) return [];
 
 			const response = await fetch("/api/connectedBoards", {
 				method: "POST",
@@ -176,38 +123,33 @@ export default function TaskItemSelector({ onSelectionChange, onResetRef, initia
 				throw new Error(data.error);
 			}
 
-			const boardOptions = (data.boards || []).map((board: any) => ({
+			return (data.boards || []).map((board: any) => ({
 				label: board.label,
 				id: board.value.toString(),
 				value: board.value.toString(),
 			}));
-			setBoards(boardOptions);
-			console.log("Loaded boards: ", boardOptions);
-			console.log("boards: ", boards);
+		},
+		enabled: !!boardIds?.length,
+		staleTime: 5 * 60 * 1000, // 5 minutes
+		gcTime: 10 * 60 * 1000, // 10 minutes
+	});
 
-			// Set initial values if provided
-			if (initialValues?.boardId && boardOptions.length > 0) {
-				const initialBoard = boardOptions.find((board: DropdownOption) => board.id === initialValues.boardId);
-				if (initialBoard) {
-					setSelectedBoard(initialBoard);
-				}
-			}
+	// Roles query
+	const { data: roles = [], isLoading: loadingRoles } = useQuery({
+		queryKey: ["roles"],
+		queryFn: async () => {
+			const { data, error } = await supabase.from("role").select("*");
+			if (error) throw error;
+			return data.map((role) => ({
+				label: role.name,
+				id: role.id,
+				value: role.id,
+			}));
+		},
+		staleTime: 10 * 60 * 1000, // Roles change infrequently
+	});
 
-			if (initialValues?.role && roles.length > 0) {
-				const initialRole = roles.find((role) => role.id === initialValues.role);
-				if (initialRole) {
-					setSelectedRole(initialRole);
-				}
-			}
-		} catch (err) {
-			console.error("Error loading boards:", err);
-			setError("Fehler beim Laden der Boards");
-		} finally {
-			setLoadingBoards(false);
-		}
-	};
-
-	// React Query for tasks
+	// Tasks query
 	const {
 		data: tasksData,
 		isLoading: isLoadingTasks,
@@ -215,86 +157,105 @@ export default function TaskItemSelector({ onSelectionChange, onResetRef, initia
 	} = useQuery<TaskGroupsResponse>({
 		queryKey: ["tasks", selectedBoard?.id],
 		queryFn: async () => {
-			if (!selectedBoard) return [];
+			if (!selectedBoard) return { groups: [] };
 			const params = new URLSearchParams({ boardId: selectedBoard.id });
-			// Add searchTerm if needed (e.g., from a search input, but not implemented here)
 			const response = await fetch(`/api/tasks?${params}`);
 			if (!response.ok) {
-				console.error(response);
 				throw new Error("Failed to fetch tasks");
 			}
 			return response.json();
 		},
 		enabled: !!selectedBoard,
-		staleTime: 5 * 60 * 1000, // 5 minutes
-		gcTime: 10 * 60 * 1000, // 10 minutes
+		staleTime: 5 * 60 * 1000,
+		gcTime: 10 * 60 * 1000,
 	});
+
+	// Handle boards error
+	useEffect(() => {
+		if (boardsError) {
+			console.error("Error loading boards:", boardsError);
+			setError("Fehler beim Laden der Boards");
+		}
+	}, [boardsError]);
+
+	// Set initial board when boards load
+	useEffect(() => {
+		if (initialValues?.boardId && boards.length > 0 && !selectedBoard) {
+			const initialBoard = boards.find((board: DropdownOption) => board.id === initialValues.boardId);
+			if (initialBoard) {
+				setSelectedBoard(initialBoard);
+			}
+		}
+	}, [boards, initialValues?.boardId, selectedBoard]);
+
+	// Set initial role when roles load
+	useEffect(() => {
+		if (initialValues?.role && roles.length > 0 && !selectedRole) {
+			const initialRole = roles.find((role: DropdownOption) => role.id === initialValues.role);
+			if (initialRole) {
+				setSelectedRole(initialRole);
+			}
+		}
+	}, [roles, initialValues?.role, selectedRole]);
 
 	// Update tasks state when query data changes
 	useEffect(() => {
-		if (tasksData) {
-			console.log("Fetched tasks data: ", JSON.stringify(tasksData));
+		if (tasksData?.groups) {
 			const mappedTasks: DropdownGroupOption[] = tasksData.groups.map((group) => ({
 				label: group.label,
 				options: group.options.map((option) => ({
-					id: option.value, // Set id to value, as per existing pattern
+					id: option.value,
 					value: option.value,
 					label: option.label,
 				})),
 			}));
 			setTasks(mappedTasks);
-			setLoadingTasks(false);
 			setError(null);
 
 			// Set initial task if provided
-			if (initialValues?.itemId && mappedTasks.length > 0) {
+			if (initialValues?.itemId && mappedTasks.length > 0 && !selectedTask) {
 				const initialTask = mappedTasks.flatMap((group) => group.options).find((task) => task.id === initialValues.itemId);
 				if (initialTask) {
 					setSelectedTask(initialTask);
 				}
 			}
 		}
-	}, [tasksData, initialValues?.itemId]);
+	}, [tasksData, initialValues?.itemId, selectedTask]);
 
-	// Handle errors from query
+	// Handle tasks error
 	useEffect(() => {
 		if (tasksError) {
 			console.error("Error loading tasks:", tasksError);
 			setError("Fehler beim Laden der Aufgaben");
 			setTasks([]);
-			setLoadingTasks(false);
 		}
 	}, [tasksError]);
 
 	// Handle board selection
 	const handleBoardChange = useCallback(
-		async (option: DropdownOption | null) => {
+		(option: DropdownOption | null) => {
 			setSelectedBoard(option);
 			setSelectedTask(null);
-			setTasksOptions([]);
 
-			console.log("Selected board:", option);
-			console.log("selectedBoard state:", selectedBoard);
-
-			if (option) {
-				// React Query will handle fetching automatically via enabled prop
-			} else {
+			if (!option) {
 				setTasks([]);
 			}
+			// React Query will handle fetching automatically via enabled prop when option is set
 
 			onSelectionChange({
 				boardId: option?.id,
 				itemId: undefined,
+				itemName: undefined,
 				role: selectedRole?.id,
 			});
 		},
 		[selectedRole, onSelectionChange]
 	);
 
-	// Handle task selection
+	// Handle task selection - includes itemName
 	const handleTaskChange = useCallback(
 		(option: DropdownOption | null) => {
-			// Prevent selection of loading placeholder items (if any remain)
+			// Prevent selection of loading placeholder items
 			if ((typeof option?.id === "string" && option.id.startsWith("loading-")) || option?.disabled) {
 				return;
 			}
@@ -304,6 +265,7 @@ export default function TaskItemSelector({ onSelectionChange, onResetRef, initia
 			onSelectionChange({
 				boardId: selectedBoard?.id,
 				itemId: option?.id,
+				itemName: option?.label,
 				role: selectedRole?.id,
 			});
 		},
@@ -318,6 +280,7 @@ export default function TaskItemSelector({ onSelectionChange, onResetRef, initia
 			onSelectionChange({
 				boardId: selectedBoard?.id,
 				itemId: selectedTask?.id,
+				itemName: selectedTask?.label,
 				role: option?.id,
 			});
 		},
@@ -349,6 +312,7 @@ export default function TaskItemSelector({ onSelectionChange, onResetRef, initia
 				onChange={handleBoardChange}
 				isClearable
 				isSearchable
+				isLoading={loadingBoards}
 				noOptionsMessage={() => "Keine Boards verfügbar"}
 				aria-label="Board auswählen"
 				menuPortalTarget={document.getElementById("save-timer-modal-outer") || undefined}
@@ -357,7 +321,7 @@ export default function TaskItemSelector({ onSelectionChange, onResetRef, initia
 				}}
 			/>
 
-			{/* Task Selector - Now with groups */}
+			{/* Task Selector - with groups */}
 			<label htmlFor="task-selector">Aufgabe auswählen</label>
 			<Select
 				id="task-selector"
@@ -368,13 +332,13 @@ export default function TaskItemSelector({ onSelectionChange, onResetRef, initia
 				onChange={handleTaskChange}
 				isClearable
 				isSearchable={!isLoadingTasks}
-				isDisabled={!selectedBoard || !tasks.length}
+				isDisabled={!selectedBoard}
 				noOptionsMessage={() => (!selectedBoard ? "Wählen Sie zuerst ein Board aus" : "Keine Aufgaben gefunden")}
 				isLoading={isLoadingTasks}
 				aria-label="Aufgabe auswählen"
 				menuPortalTarget={document.getElementById("save-timer-modal-outer") || undefined}
 				styles={{
-					menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+					menuPortal: (base) => ({ ...base, zIndex: 10001 }),
 				}}
 			/>
 
@@ -389,11 +353,12 @@ export default function TaskItemSelector({ onSelectionChange, onResetRef, initia
 				onChange={handleRoleChange}
 				isClearable
 				isSearchable
+				isLoading={loadingRoles}
 				noOptionsMessage={() => "Keine Rollen verfügbar"}
 				aria-label="Rolle auswählen"
 				menuPortalTarget={document.getElementById("save-timer-modal-outer") || undefined}
 				styles={{
-					menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+					menuPortal: (base) => ({ ...base, zIndex: 10001 }),
 				}}
 			/>
 		</Flex>

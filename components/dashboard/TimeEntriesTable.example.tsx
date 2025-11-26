@@ -3,16 +3,17 @@
 /**
  * EXAMPLE: TimeEntriesTable component updated to use new store pattern
  * This shows how to migrate from hooks to stores
- * 
+ *
  * Changes from original:
  * - Uses useTimeEntriesStore instead of useTimeEntries hook
  * - Uses useHydration to prevent hydration mismatches
+ * - Uses new timer store API with status instead of isPaused
  * - Fetches data in useEffect after component mounts
  */
 
 import { useState, useEffect, useMemo } from "react";
 import { useUserStore } from "@/stores/userStore";
-import { useTimerStore } from "@/stores/timerStore";
+import { useTimerStore, useTimerComputed } from "@/stores/timerStore";
 import { useTimeEntriesStore } from "@/stores/timeEntriesStore";
 import { useHydration } from "@/lib/store-utils";
 import { Table, TableHeader, TableHeaderCell, TableBody, TableRow, TableCell, Checkbox } from "@vibe/core";
@@ -20,16 +21,19 @@ import { formatDuration } from "@/lib/utils";
 
 export default function TimeEntriesTableExample() {
 	const [selectedIds, setSelectedIds] = useState<string[]>([]);
-	
+
 	// Hydration check for SSR safety
 	const hydrated = useHydration();
-	
+
 	// Get user ID from store
 	const userId = useUserStore((state) => state.supabaseUser?.id);
-	
-	// Get timer state
-	const { elapsedTime, startTimer, pauseTimer, resetTimer, softResetTimer, isPaused, draftId, sessionId } = useTimerStore();
-	
+
+	// Get timer state using new API
+	const elapsedTime = useTimerStore((s) => s.elapsedTime);
+	const sessionId = useTimerStore((s) => s.sessionId);
+	const draftId = useTimerStore((s) => s.draftId);
+	const { isActive, isPaused, hasSession } = useTimerComputed();
+
 	// Get time entries from store
 	const { timeEntries, loading, error, fetchTimeEntries, refetch } = useTimeEntriesStore();
 
@@ -44,51 +48,51 @@ export default function TimeEntriesTableExample() {
 		{
 			id: "selection",
 			title: "",
-			loadingStateType: "circle",
+			loadingStateType: "circle" as const,
 			width: 40,
 		},
 		{
 			id: "task",
 			title: "Aufgabe",
-			loadingStateType: "medium-text",
+			loadingStateType: "medium-text" as const,
 		},
 		{
 			id: "board",
 			title: "Board",
-			loadingStateType: "medium-text",
+			loadingStateType: "medium-text" as const,
 		},
 		{
 			id: "job",
 			title: "Job",
-			loadingStateType: "medium-text",
+			loadingStateType: "medium-text" as const,
 		},
 		{
 			id: "comment",
 			title: "Kommentar",
-			loadingStateType: "medium-text",
+			loadingStateType: "medium-text" as const,
 		},
 		{
 			id: "date",
 			title: "Datum",
-			loadingStateType: "medium-text",
+			loadingStateType: "medium-text" as const,
 			width: 150,
 		},
 		{
 			id: "start",
 			title: "Start",
-			loadingStateType: "medium-text",
+			loadingStateType: "medium-text" as const,
 			width: 100,
 		},
 		{
 			id: "end",
 			title: "Ende",
-			loadingStateType: "medium-text",
+			loadingStateType: "medium-text" as const,
 			width: 100,
 		},
 		{
 			id: "totalTime",
 			title: "Gesamtzeit",
-			loadingStateType: "medium-text",
+			loadingStateType: "medium-text" as const,
 			width: 120,
 		},
 	];

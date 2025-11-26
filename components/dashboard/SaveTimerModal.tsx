@@ -1,16 +1,16 @@
 // components/dashboard/SaveTimerModal.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Flex, Text, TextField } from "@vibe/core";
 import { formatTime } from "@/lib/utils";
 import { Modal, ModalBasicLayout, ModalHeader, ModalContent, ModalFooter } from "@vibe/core/next";
-import TaskItemSelector from "../TaskItemSelector";
+import TaskItemSelector, { TaskSelection } from "../TaskItemSelector";
 import { useTimerStore } from "@/stores/timerStore";
 import { useUserStore } from "@/stores/userStore";
 import { useTimeEntriesStore } from "@/stores/timeEntriesStore";
+import { useMondayStore } from "@/stores/mondayStore";
 import { useToast } from "@/components/ToastProvider";
-import { supabase } from "@/lib/supabase/client";
 import mondaySdk from "monday-sdk-js";
 
 const monday = mondaySdk();
@@ -20,28 +20,49 @@ interface SaveTimerModalProps {
 	onClose: () => void;
 }
 
+/**
+ * SaveTimerModal - Modal for saving a timer session to a time entry
+ *
+ * This component allows the user to:
+ * - Select a task/item to associate the time entry with
+ * - Add/edit a comment
+ * - Save the time entry
+ */
 export default function SaveTimerModal({ show, onClose }: SaveTimerModalProps) {
-	const [selectedTask, setSelectedTask] = useState<{
-		boardId?: string;
-		itemId?: string;
-		role?: string;
-	} | null>(null);
+	const [selectedTask, setSelectedTask] = useState<TaskSelection | null>(null);
 	const [isSaving, setIsSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const { refetch } = useTimeEntriesStore((s) => s);
 
+	// Store selectors
+	const { refetch } = useTimeEntriesStore();
+	const { rawContext } = useMondayStore();
 	const { showToast } = useToast();
 	const userProfile = useUserStore((state) => state.supabaseUser);
-	const { comment, elapsedTime, draftId } = useTimerStore();
-	const { updateComment, softResetTimer } = useTimerStore.getState();
 
-	const handleTaskSelection = (taskData: { boardId?: string; itemId?: string; role?: string }) => {
+	// Timer store - using new API
+	const comment = useTimerStore((state) => state.comment);
+	const elapsedTime = useTimerStore((state) => state.elapsedTime);
+	const draftId = useTimerStore((state) => state.draftId);
+	const sessionId = useTimerStore((state) => state.sessionId);
+
+	// Store actions
+	const { setComment, reset: resetTimer } = useTimerStore.getState();
+
+	// Clear error state and selection when modal opens
+	useEffect(() => {
+		if (show) {
+			setError(null);
+			setSelectedTask(null);
+		}
+	}, [show]);
+
+	const handleTaskSelection = (taskData: TaskSelection) => {
 		setSelectedTask(taskData);
 	};
 
 	const handleSave = async () => {
 		if (!draftId || !selectedTask || !userProfile?.id) {
-			console.error("Cannot save: missing required data");
+			console.error("Cannot save: missing required data", { draftId, selectedTask, userId: userProfile?.id });
 			return;
 		}
 
@@ -49,40 +70,69 @@ export default function SaveTimerModal({ show, onClose }: SaveTimerModalProps) {
 		setError(null);
 
 		try {
-			const taskName = selectedTask.itemId ? `Task ${selectedTask.itemId}` : "Manual Entry";
+			// Use actual task name from selection, with fallback
+			const taskName = selectedTask.itemName || "Unbenannter Zeit-Eintrag";
 
-			// Call RPC to finalize time entry
-			const { data, error } = await supabase.rpc("finalize_time_entry", {
-				p_user_id: userProfile.id,
-				p_draft_id: draftId,
-				p_task_name: taskName,
-				p_comment: comment,
-				p_board_id: selectedTask.boardId,
-				p_item_id: selectedTask.itemId,
-				p_role: selectedTask.role,
+			// Get fresh context for the API call
+			const context = rawContext || (await monday.get("context"));
+
+			// Call API route to finalize time entry
+			const response = await fetch("/api/time-entries/finalize", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"monday-context": JSON.stringify(context),
+				},
+				body: JSON.stringify({
+					draftId,
+					taskName,
+					comment,
+					boardId: selectedTask.boardId,
+					itemId: selectedTask.itemId,
+					role: selectedTask.role,
+				}),
 			});
 
-			if (error) throw error;
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.error || "Failed to save time entry");
+			}
 
 			showToast("Zeiteintrag gespeichert.", "positive", 2000);
 
-			// Soft reset timer (keeps draft but clears session)
-			const context = await monday.get("context");
-			await softResetTimer(context);
+			// Soft reset timer via API (keeps time entry but clears session)
+			if (sessionId) {
+				await fetch("/api/timer/soft-reset", {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						"monday-context": JSON.stringify(context),
+					},
+					body: JSON.stringify({
+						draftId,
+						sessionId,
+					}),
+				});
+			}
+
+			// Reset local timer state
+			resetTimer();
+
+			// Refetch time entries to show the new one
+			refetch(userProfile.id);
 
 			onClose();
 		} catch (err: any) {
 			console.error("Error saving time entry:", err);
-			setError(err.message || "Failed to save time entry");
+			setError(err.message || "Fehler beim Speichern des Zeiteintrags");
 			showToast("Fehler beim Speichern", "negative", 2000);
 		} finally {
 			setIsSaving(false);
-			refetch(userProfile?.id);
 		}
 	};
 
-	const handleChange = (value: string) => {
-		updateComment(value);
+	const handleCommentChange = (value: string) => {
+		setComment(value);
 	};
 
 	return (
@@ -90,35 +140,30 @@ export default function SaveTimerModal({ show, onClose }: SaveTimerModalProps) {
 			<div id="modal-portal"></div>
 			<Modal id="save-timer-modal" show={show} onClose={onClose} container={document.getElementById("save-timer-modal-outer") || undefined}>
 				<ModalBasicLayout>
-					<ModalHeader title={"Save Timer"} />
+					<ModalHeader title={"Timer speichern"} />
 					<ModalContent>
 						<Flex direction="column" gap={16}>
-							<Text>Elapsed Time: {formatTime(elapsedTime)}</Text>
+							<Text>Erfasste Zeit: {formatTime(elapsedTime)}</Text>
 
 							{error && <Text style={{ color: "var(--negative-color)" }}>{error}</Text>}
 
-							<TaskItemSelector
-								onSelectionChange={handleTaskSelection}
-								onResetRef={(resetFn) => {
-									/* store reset function */
-								}}
-							/>
+							<TaskItemSelector onSelectionChange={handleTaskSelection} />
 
-							<TextField inputAriaLabel="Kommentar hinzufügen..." value={comment} onChange={handleChange} placeholder="Kommentar hinzufügen..." />
+							<TextField inputAriaLabel="Kommentar hinzufügen..." value={comment} onChange={handleCommentChange} placeholder="Kommentar hinzufügen..." />
 						</Flex>
 					</ModalContent>
 				</ModalBasicLayout>
 				<ModalFooter
 					primaryButton={{
-						text: "Speichern",
+						text: isSaving ? "Speichern..." : "Speichern",
 						onClick: handleSave,
 						ariaLabel: "Zeit-Eintrag speichern",
-						disabled: !selectedTask || isSaving,
+						disabled: !selectedTask?.itemId || isSaving,
 					}}
 					secondaryButton={{
 						text: "Abbrechen",
 						onClick: onClose,
-						ariaLabel: "Zeit-Eintrag abbrechen",
+						ariaLabel: "Speichervorgang abbrechen",
 					}}
 				/>
 			</Modal>

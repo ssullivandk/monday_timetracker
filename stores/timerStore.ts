@@ -1,282 +1,242 @@
 // stores/timerStore.ts
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { useUserStore } from "./userStore";
+import { useShallow } from "zustand/react/shallow";
+import type { TimerStore, TimerStatus, ServerSyncRef } from "@/types/timer.types";
 
-type TimerSession = {
-	id: string;
-	user_id: string;
-	start_time: string;
-	is_paused: boolean;
-	elapsed_time: number;
-	draft_id: string | null;
-	time_entry?: {
-		id: string;
-		comment: string;
-	} | null;
-};
+/**
+ * Initial state for the timer store
+ */
+const initialState = {
+	// Session data
+	sessionId: null as string | null,
+	draftId: null as string | null,
+	elapsedTime: 0,
+	startTime: null as string | null,
+	status: "idle" as TimerStatus,
 
-interface TimerState {
-	// Timer session state
-	elapsedTime: number;
-	startTime: string | null;
-	isPaused: boolean;
-	draftId: string | null;
-	sessionId: string | null;
-
-	// Comment state
-	comment: string;
+	// Comment
+	comment: "",
 
 	// UI state
-	isSaving: boolean;
-	error: string | null;
+	isSaving: false,
+	isLoading: false,
+	error: null as string | null,
 
-	// Actions
-	startTimer: (mondayContext: any) => Promise<void>;
-	pauseTimer: (mondayContext: any) => Promise<void>;
-	resetTimer: (mondayContext: any) => Promise<void>;
-	softResetTimer: (mondayContext: any) => Promise<void>;
-	updateComment: (comment: string) => void;
-	clearComment: () => void;
-	setError: (error: string | null) => void;
-}
+	// Server sync reference
+	_serverSync: null as ServerSyncRef | null,
+};
 
-export const useTimerStore = create<TimerState>()(
+/**
+ * Timer store - pure state container with simple setters
+ *
+ * Design principles:
+ * - No API calls in the store (moved to useTimer hook)
+ * - Simple, predictable state updates
+ * - Clear separation between state and actions
+ * - Persist only essential data for session recovery
+ */
+export const useTimerStore = create<TimerStore>()(
 	persist(
 		(set, get) => ({
-			// Initial state
-			elapsedTime: 0,
-			startTime: null,
-			isPaused: false,
-			draftId: null,
-			sessionId: null,
-			comment: "",
-			isSaving: false,
-			error: null,
+			...initialState,
 
-			// Actions
-			startTimer: async (mondayContext: any) => {
-				console.log("startTimer called");
-				const user = useUserStore.getState().supabaseUser;
-				console.log("Current timer state before start:", {
-					userId: user?.id,
-					sessionId: get().sessionId,
-					isPaused: get().isPaused,
-				});
-				if (!user) return;
-				try {
-					set({ error: null });
+			// ============================================
+			// Session Management
+			// ============================================
 
-					const headers = { "monday-context": JSON.stringify(mondayContext) };
-					const response = await fetch("/api/timer/start", {
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							...headers,
-						},
-						body: JSON.stringify({}),
-					});
-
-					if (!response.ok) {
-						const errorData = await response.json();
-						throw new Error(errorData.error || "Failed to start timer");
-					}
-
-					const data = await response.json();
-					console.log("Timer started data session:", data.session);
-
-					if (data.resumed) {
-						set({
-							elapsedTime: data.elapsedTime,
-							startTime: data.session.start_time,
-							isPaused: false,
-							draftId: data.session.draft_id,
-							sessionId: data.session.id,
-						});
-						console.log("Timer resumed with existing session:", data.session.id);
-					} else {
-						set((prev) => ({
-							...prev,
-							elapsedTime: 0,
-							startTime: data.session.start_time,
-							isPaused: false,
-							draftId: data.draft.id,
-							sessionId: data.session.id,
-						}));
-						console.log("Timer started with new session:", data.session.id);
-					}
-				} catch (err: any) {
-					console.error("Failed to start timer:", err);
-					set((prev) => ({
-						...prev,
-						elapsedTime: 0,
-						startTime: null,
-						isPaused: false,
-						draftId: null,
+			/**
+			 * Set session data from API response
+			 * Pass null to clear session
+			 */
+			setSession: (session) => {
+				if (session === null) {
+					set({
 						sessionId: null,
-					}));
-					set({ error: err.message || "Failed to start timer" });
-				}
-			},
-
-			pauseTimer: async (mondayContext: any) => {
-				console.log("pauseTimer called");
-				const user = useUserStore.getState().supabaseUser;
-				console.log("Current timer state before pause/resume:", {
-					userId: user?.id,
-					sessionId: get().sessionId,
-					isPaused: get().isPaused,
-				});
-				if (!user || !get().sessionId || (!get().sessionId && !get().isPaused)) {
+						draftId: null,
+						startTime: null,
+						status: "idle",
+					});
 					return;
 				}
-				console.log("Current timer state before pause/resume:", {
-					sessionId: get().sessionId,
-					isPaused: get().isPaused,
+
+				set({
+					sessionId: session.id ?? get().sessionId,
+					draftId: session.draft_id ?? get().draftId,
+					startTime: session.start_time ?? get().startTime,
+					status: session.is_paused !== undefined ? (session.is_paused ? "paused" : "running") : get().status,
 				});
-
-				const isPausing = get().sessionId && !get().isPaused;
-
-				try {
-					set({ error: null });
-
-					const headers = { "monday-context": JSON.stringify(mondayContext) };
-					const response = await fetch("/api/timer/pause", {
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							...headers,
-						},
-						body: JSON.stringify({
-							sessionId: get().sessionId,
-							elapsedTime: get().elapsedTime,
-							isPausing: !get().isPaused,
-						}),
-					});
-
-					if (!response.ok) {
-						const errorData = await response.json();
-						throw new Error(errorData.error || "Failed to toggle timer");
-					}
-
-					console.log("Response from pause/resume API:", response);
-
-					if (response.ok && !isPausing) {
-						console.log("Timer resumed after response check");
-						set((prev) => ({ ...prev, isPaused: false }));
-					} else if (response.ok && isPausing) {
-						console.log("Timer paused after response check");
-						set((prev) => ({ ...prev, isPaused: true }));
-					}
-				} catch (err: any) {
-					console.error("pauseTimer failed:", err);
-					set((prev) => ({ ...prev, isPaused: get().isPaused }));
-					set({ error: err.message || "Failed to toggle timer" });
-				}
 			},
 
-			resetTimer: async (sessionData: { userId: string; draftId: string; sessionId: string }) => {
-				console.log("resetTimer called");
-				const user = useUserStore.getState().supabaseUser;
-				if (!user || !get().draftId || !get().sessionId) return;
-
-				try {
-					set({ error: null });
-
-					const draftIdTemp = get().draftId;
-					const sessionIdTemp = get().sessionId;
-
-					set({
-						elapsedTime: 0,
-						startTime: null,
-						isPaused: false,
-						draftId: null,
-						sessionId: null,
-						comment: "",
-						error: null,
-					});
-
-					const headers = { "user-id": sessionData.userId, "session-id": sessionData.sessionId, "draft-id": sessionData.draftId };
-					const response = await fetch("/api/timer/reset", {
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							...headers,
-						},
-					});
-
-					if (!response.ok) {
-						const errorData = await response.json();
-						throw new Error(errorData.error || "Failed to reset timer");
-					}
-				} catch (err: any) {
-					console.error("Failed to reset timer:", err);
-					set({ error: err.message || "Failed to reset timer" });
-				}
+			/**
+			 * Set timer status (idle, running, paused)
+			 */
+			setStatus: (status) => {
+				set({ status });
 			},
 
-			softResetTimer: async (mondayContext: any) => {
-				console.log("softResetTimer called");
-				const user = useUserStore.getState().supabaseUser;
-				if (!user || !get().draftId || !get().sessionId) return;
-
-				try {
-					set({ error: null });
-
-					const draftIdTemp = get().draftId;
-					const sessionIdTemp = get().sessionId;
-
-					set({
-						elapsedTime: 0,
-						startTime: null,
-						isPaused: false,
-						draftId: null,
-						sessionId: null,
-					});
-
-					const headers = { "monday-context": JSON.stringify(mondayContext) };
-					const response = await fetch("/api/timer/soft-reset", {
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							...headers,
-						},
-						body: JSON.stringify({
-							draftId: draftIdTemp,
-							sessionId: sessionIdTemp,
-						}),
-					});
-
-					if (!response.ok) {
-						const errorData = await response.json();
-						throw new Error(errorData.error || "Failed to reset timer");
-					}
-				} catch (err: any) {
-					console.error("Failed to reset timer:", err);
-					set({ error: err.message || "Failed to reset timer" });
-				}
+			/**
+			 * Set elapsed time in milliseconds
+			 */
+			setElapsedTime: (elapsedTime) => {
+				set({ elapsedTime });
 			},
 
-			updateComment: (comment: string) => {
+			// ============================================
+			// Server Sync
+			// ============================================
+
+			/**
+			 * Update server sync reference for local time calculation
+			 * Called when receiving elapsed time from server
+			 */
+			updateServerSync: (baseTime) => {
+				set({
+					_serverSync: {
+						baseElapsedTime: baseTime,
+						syncedAt: Date.now(),
+					},
+				});
+			},
+
+			/**
+			 * Clear server sync reference
+			 */
+			clearServerSync: () => {
+				set({ _serverSync: null });
+			},
+
+			// ============================================
+			// Comment
+			// ============================================
+
+			/**
+			 * Update comment text
+			 */
+			setComment: (comment) => {
 				set({ comment });
 			},
 
+			/**
+			 * Clear comment
+			 */
 			clearComment: () => {
 				set({ comment: "" });
 			},
 
-			setError: (error: string | null) => {
+			// ============================================
+			// UI State
+			// ============================================
+
+			/**
+			 * Set saving state
+			 */
+			setSaving: (isSaving) => {
+				set({ isSaving });
+			},
+
+			/**
+			 * Set loading state
+			 */
+			setLoading: (isLoading) => {
+				set({ isLoading });
+			},
+
+			/**
+			 * Set error message
+			 */
+			setError: (error) => {
 				set({ error });
+			},
+
+			// ============================================
+			// Full Reset
+			// ============================================
+
+			/**
+			 * Reset all state to initial values
+			 */
+			reset: () => {
+				set({
+					...initialState,
+				});
 			},
 		}),
 		{
 			name: "timer-store",
 			skipHydration: true, // Important for Next.js SSR
 			partialize: (state) => ({
+				// Only persist essential data for session recovery
 				comment: state.comment,
 				draftId: state.draftId,
 				sessionId: state.sessionId,
+				// Don't persist: elapsedTime (fetched from server), status, UI states, _serverSync
 			}),
 		}
 	)
 );
+
+// ============================================
+// Selector Hooks (for optimized re-renders)
+// Using useShallow to prevent infinite loops with object selectors
+// ============================================
+
+/**
+ * Select only session-related state
+ * Uses useShallow for shallow comparison of object result
+ */
+export function useTimerSession() {
+	return useTimerStore(
+		useShallow((state) => ({
+			sessionId: state.sessionId,
+			draftId: state.draftId,
+			startTime: state.startTime,
+			status: state.status,
+		}))
+	);
+}
+
+/**
+ * Select only elapsed time
+ * Primitive value, no shallow comparison needed
+ */
+export function useTimerElapsed() {
+	return useTimerStore((state) => state.elapsedTime);
+}
+
+/**
+ * Select only comment
+ * Primitive value, no shallow comparison needed
+ */
+export function useTimerComment() {
+	return useTimerStore((state) => state.comment);
+}
+
+/**
+ * Select only UI state
+ * Uses useShallow for shallow comparison of object result
+ */
+export function useTimerUIState() {
+	return useTimerStore(
+		useShallow((state) => ({
+			isSaving: state.isSaving,
+			isLoading: state.isLoading,
+			error: state.error,
+		}))
+	);
+}
+
+/**
+ * Select computed values
+ * Uses useShallow for shallow comparison of object result
+ */
+export function useTimerComputed() {
+	return useTimerStore(
+		useShallow((state) => ({
+			isActive: state.status === "running",
+			hasSession: state.sessionId !== null,
+			canSave: state.sessionId !== null && !state.isSaving,
+			isPaused: state.status === "paused",
+		}))
+	);
+}

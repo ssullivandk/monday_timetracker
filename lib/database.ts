@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { cacheHelper } from "@/lib/redis";
-import type { Database } from "@/types/database";
+import type { Database, FinalizeSegmentResult } from "@/types/database";
 
 type TimeEntry = Database["public"]["Tables"]["time_entry"]["Row"];
 type TimeEntryInsert = Database["public"]["Tables"]["time_entry"]["Insert"];
@@ -147,9 +147,9 @@ export async function upsertTimerSession(sessionData: Partial<TimerSessionInsert
 	console.log("Upserting timer session with data:", sessionData);
 
 	// Ensure required fields for insert
+	// NOTE: Do NOT pass start_time - let database use DEFAULT NOW() for timestamp consistency
 	const insertData = {
 		user_id: sessionData.user_id,
-		start_time: sessionData.start_time || new Date().toISOString(),
 		elapsed_time: sessionData.elapsed_time || 0,
 		is_paused: sessionData.is_paused ?? false,
 		draft_id: sessionData.draft_id,
@@ -184,12 +184,12 @@ export async function clearTimerSession(userId: string): Promise<void> {
 }
 
 // Start timer: Create draft, session, and initial segment
+// NOTE: All start_time values are set by database DEFAULT NOW() to ensure timestamp consistency
+// This prevents clock drift issues between app server and database server
 export async function startTimer(userId: string) {
 	if (!userId) {
 		throw new Error("user_id is required");
 	}
-
-	const now = new Date().toISOString();
 
 	try {
 		// Check for existing active session and clear if needed
@@ -198,38 +198,38 @@ export async function startTimer(userId: string) {
 			await clearTimerSession(userId);
 		}
 
-		// Create draft time_entry
+		// Create draft time_entry - start_time will be set by database DEFAULT NOW()
 		const { data: draft, error: draftError } = await supabaseAdmin
 			.from("time_entry")
 			.insert({
 				user_id: userId,
 				is_draft: true,
-				start_time: now,
+				// Do NOT pass start_time - database will use DEFAULT NOW()
 			})
 			.select()
 			.single();
 
 		if (draftError) throw draftError;
 
-		// Create timer_session
+		// Create timer_session - start_time will be set by database DEFAULT NOW()
 		const { data: session, error: sessionError } = await supabaseAdmin
 			.from("timer_session")
 			.insert({
 				user_id: userId,
 				draft_id: draft.id,
-				start_time: now,
 				elapsed_time: 0,
+				// Do NOT pass start_time - database will use DEFAULT NOW()
 			})
 			.select()
 			.single();
 
 		if (sessionError) throw sessionError;
 
-		// Create initial running timer_segment
+		// Create initial running timer_segment - start_time will be set by database DEFAULT NOW()
 		const { error: segmentError } = await supabaseAdmin.from("timer_segment").insert({
 			session_id: session.id,
-			start_time: now,
-			// end_time/duration null implicit, no flags needed
+			// Do NOT pass start_time - database will use DEFAULT NOW()
+			// end_time/duration null implicit
 		});
 
 		if (segmentError) throw segmentError;
@@ -241,6 +241,8 @@ export async function startTimer(userId: string) {
 	}
 }
 
+// Start a new running segment when resuming timer
+// NOTE: start_time is set by database DEFAULT NOW() to ensure timestamp consistency
 export async function startRunningSegment(sessionId: string, userId: string) {
 	console.log("Starting running segment for session:", sessionId);
 	// Verify session ownership
@@ -250,14 +252,13 @@ export async function startRunningSegment(sessionId: string, userId: string) {
 		throw new Error("Timer session not found or access denied");
 	}
 
-	const now = new Date().toISOString();
-
+	// Create segment - start_time will be set by database DEFAULT NOW()
 	const { data, error } = await supabaseAdmin
 		.from("timer_segment")
 		.insert({
 			session_id: sessionId,
-			start_time: now,
-			// end_time/duration null implicit, no flags needed
+			// Do NOT pass start_time - database will use DEFAULT NOW()
+			// end_time/duration null implicit
 		})
 		.select("id")
 		.single();
@@ -270,9 +271,9 @@ export async function startRunningSegment(sessionId: string, userId: string) {
 	return data;
 }
 
-export async function pauseTimer(sessionId: string, userId: string) {
+export async function pauseTimer(sessionId: string, userId: string): Promise<FinalizeSegmentResult> {
 	console.log("Pausing timer for session:", sessionId);
-	// Call RPC to finalize open segment(s)
+	// Call RPC to finalize open segment(s) - uses database NOW() for end_time
 	const { data: rpcResult, error: rpcError } = await supabaseAdmin.rpc("finalize_segment", { p_session_id: sessionId });
 
 	if (rpcError || !rpcResult) {
@@ -280,14 +281,17 @@ export async function pauseTimer(sessionId: string, userId: string) {
 		throw new Error("Failed to finalize timer segment");
 	}
 
-	console.log("Segment finalized, RPC result:", rpcResult);
+	// Cast to proper type - RPC returns the jsonb object
+	const result = rpcResult as unknown as FinalizeSegmentResult;
+
+	console.log("Segment finalized, RPC result:", result);
 
 	// Update session flags and elapsed time in one operation
 	const { error: sessionUpdateError } = await supabaseAdmin
 		.from("timer_session")
 		.update({
 			is_paused: true,
-			elapsed_time: rpcResult.elapsed_time_ms, // Use RPC result to avoid separate updates
+			elapsed_time: result.elapsed_time_ms, // Use RPC result to avoid separate updates
 		})
 		.eq("id", sessionId)
 		.eq("user_id", userId);
@@ -297,7 +301,7 @@ export async function pauseTimer(sessionId: string, userId: string) {
 		throw sessionUpdateError;
 	}
 
-	return rpcResult;
+	return result;
 }
 
 export async function resumeTimer(sessionId: string, userId: string) {
@@ -309,7 +313,7 @@ export async function resumeTimer(sessionId: string, userId: string) {
 		throw new Error("Timer session not found or access denied");
 	}
 
-	// Start new running segment
+	// Start new running segment - start_time will be set by database
 	await startRunningSegment(sessionId, userId);
 
 	// Update session flags to reflect resume (elapsed_time will be updated via real-time or API if needed)

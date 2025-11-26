@@ -1,41 +1,38 @@
 // components/TimerCommentField.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Flex, TextField } from "@vibe/core";
-import { useDraftStore } from "@/stores/draftStore";
-import { useTimerStore } from "@/stores/timerStore";
-import { useUserStore } from "@/stores/userStore";
+import type { TimerCommentFieldProps } from "@/types/timer.types";
 import "@/public/css/components/TimerCommentField.css";
 
-export default function TimerCommentField({ setComment, comment, activeSession }: { setComment?: (value: string) => void; comment?: string; activeSession?: boolean }) {
-	const [focus, setFocus] = useState(false);
-	const sessionId = useTimerStore((state) => state.sessionId);
-	const supabaseUser = useUserStore((state) => state.supabaseUser);
-	const { autoSaveDraft } = useDraftStore();
-
-	// Auto-save comment when it changes
-	useEffect(() => {
-		if (comment && supabaseUser?.id && sessionId && activeSession) {
-			autoSaveDraft({
-				comment,
-				userId: supabaseUser.id,
-				sessionId,
-			});
-		}
-	}, [comment, supabaseUser?.id, sessionId, activeSession, autoSaveDraft]);
-
-	const handleBlur = async () => {
-		setFocus(false);
-	};
+/**
+ * TimerCommentField - Presentational component for comment input
+ *
+ * This is a pure presentational component that:
+ * - Receives all data and callbacks via props
+ * - Has NO store access
+ * - Only handles rendering and local focus state
+ *
+ * @param value - Current comment value
+ * @param onChange - Callback when comment changes
+ * @param disabled - Whether the input should be disabled
+ */
+export default function TimerCommentField({ value, onChange, disabled }: TimerCommentFieldProps) {
+	// Local state for focus styling only
+	const [isFocused, setIsFocused] = useState(false);
 
 	const handleFocus = () => {
-		setFocus(true);
+		setIsFocused(true);
+	};
+
+	const handleBlur = () => {
+		setIsFocused(false);
 	};
 
 	return (
 		<Flex direction="row" align="center" className="timer-comment-field-container" gap="small">
-			<TextField className={`timer-comment-field${focus ? " focus" : ""}`} wrapperClassName="timer-comment-field-wrapper" placeholder="Kommentar hinzufügen..." inputAriaLabel="Kommentar hinzufügen..." onChange={setComment} onBlur={handleBlur} onFocus={handleFocus} value={comment} disabled={!activeSession} />
+			<TextField className={`timer-comment-field${isFocused ? " focus" : ""}`} wrapperClassName="timer-comment-field-wrapper" placeholder="Kommentar hinzufügen..." inputAriaLabel="Kommentar hinzufügen..." onChange={onChange} onBlur={handleBlur} onFocus={handleFocus} value={value} disabled={disabled} />
 		</Flex>
 	);
 }
