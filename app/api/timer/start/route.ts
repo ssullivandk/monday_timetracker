@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getMondayContext } from "@/lib/monday";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { startTimer, startRunningSegment } from "@/lib/database";
+import type { GetCurrentElapsedTimeResult } from "@/types/database";
 
 export async function POST(request: NextRequest) {
 	console.log("Received start timer request");
@@ -33,9 +34,18 @@ export async function POST(request: NextRequest) {
 
 			if (updateError) throw updateError;
 
+			// Get server-calculated elapsed time using RPC
+			const { data: elapsedTimeResult, error: rpcError } = await supabaseAdmin.rpc("get_current_elapsed_time", { p_session_id: existingSession.id });
+
+			let calculatedElapsedTime = existingSession.elapsed_time;
+			if (!rpcError && elapsedTimeResult) {
+				const typedResult = elapsedTimeResult as unknown as GetCurrentElapsedTimeResult;
+				calculatedElapsedTime = typedResult.elapsed_time_ms;
+			}
+
 			return NextResponse.json({
 				session: updatedSession,
-				elapsedTime: existingSession.elapsed_time,
+				elapsedTime: calculatedElapsedTime,
 				resumed: true,
 			});
 		}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getMondayContext } from "@/lib/monday";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { pauseTimer, resumeTimer } from "@/lib/database";
+import type { GetCurrentElapsedTimeResult } from "@/types/database";
 
 export async function POST(request: NextRequest) {
 	try {
@@ -21,10 +22,38 @@ export async function POST(request: NextRequest) {
 
 		if (isPausing) {
 			await pauseTimer(sessionId, userId.id);
-			return NextResponse.json({ success: true, paused: true });
+
+			// Get the final elapsed time from the server after pausing
+			const { data: elapsedTimeResult, error: rpcError } = await supabaseAdmin.rpc("get_current_elapsed_time", { p_session_id: sessionId });
+
+			let calculatedElapsedTime = elapsedTime;
+			if (!rpcError && elapsedTimeResult) {
+				const typedResult = elapsedTimeResult as unknown as GetCurrentElapsedTimeResult;
+				calculatedElapsedTime = typedResult.elapsed_time_ms;
+			}
+
+			return NextResponse.json({
+				success: true,
+				paused: true,
+				elapsedTime: calculatedElapsedTime,
+			});
 		} else {
 			await resumeTimer(sessionId, userId.id);
-			return NextResponse.json({ success: true, paused: false });
+
+			// Get the current elapsed time after resuming
+			const { data: elapsedTimeResult, error: rpcError } = await supabaseAdmin.rpc("get_current_elapsed_time", { p_session_id: sessionId });
+
+			let calculatedElapsedTime = elapsedTime;
+			if (!rpcError && elapsedTimeResult) {
+				const typedResult = elapsedTimeResult as unknown as GetCurrentElapsedTimeResult;
+				calculatedElapsedTime = typedResult.elapsed_time_ms;
+			}
+
+			return NextResponse.json({
+				success: true,
+				paused: false,
+				elapsedTime: calculatedElapsedTime,
+			});
 		}
 	} catch (error) {
 		console.error("Error pausing timer:", error);

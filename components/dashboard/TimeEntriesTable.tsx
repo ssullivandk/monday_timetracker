@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useUserStore } from "@/stores/userStore";
-import { useTimerStore } from "@/stores/timerStore";
+import { useTimerStore, useTimerComputed } from "@/stores/timerStore";
 import { useTimeEntriesStore } from "@/stores/timeEntriesStore";
 import { Table, TableHeader, TableHeaderCell, TableBody, TableRow, TableCell, Checkbox } from "@vibe/core";
 import { TimeEntry } from "@/types/time-entry";
@@ -16,9 +16,14 @@ interface TimeEntriesTableProps {
 }
 
 export default function TimeEntriesTable({ onRefetch }: TimeEntriesTableProps) {
-	const { timeEntries, setTimeEntries, fetchTimeEntries, loading, error } = useTimeEntriesStore();
+	const { timeEntries, loading, error } = useTimeEntriesStore();
 	const [selectedIds, setSelectedIds] = useState<string[]>([]);
-	const { elapsedTime, startTimer, pauseTimer, resetTimer, softResetTimer, isPaused, draftId, sessionId } = useTimerStore();
+
+	// Use new timer store selectors
+	const elapsedTime = useTimerStore((s) => s.elapsedTime);
+	const sessionId = useTimerStore((s) => s.sessionId);
+	const draftId = useTimerStore((s) => s.draftId);
+	const { isActive, isPaused, hasSession } = useTimerComputed();
 
 	const userId = useUserStore((state) => state.supabaseUser?.id);
 
@@ -26,51 +31,51 @@ export default function TimeEntriesTable({ onRefetch }: TimeEntriesTableProps) {
 		{
 			id: "selection",
 			title: "",
-			loadingStateType: "circle",
+			loadingStateType: "circle" as const,
 			width: 40,
 		},
 		{
 			id: "task",
 			title: "Aufgabe",
-			loadingStateType: "medium-text",
+			loadingStateType: "medium-text" as const,
 		},
 		{
 			id: "board",
 			title: "Board",
-			loadingStateType: "medium-text",
+			loadingStateType: "medium-text" as const,
 		},
 		{
 			id: "job",
 			title: "Job",
-			loadingStateType: "medium-text",
+			loadingStateType: "medium-text" as const,
 		},
 		{
 			id: "comment",
 			title: "Kommentar",
-			loadingStateType: "medium-text",
+			loadingStateType: "medium-text" as const,
 		},
 		{
 			id: "date",
 			title: "Datum",
-			loadingStateType: "medium-text",
+			loadingStateType: "medium-text" as const,
 			width: 150,
 		},
 		{
 			id: "start",
 			title: "Start",
-			loadingStateType: "medium-text",
+			loadingStateType: "medium-text" as const,
 			width: 100,
 		},
 		{
 			id: "end",
 			title: "Ende",
-			loadingStateType: "medium-text",
+			loadingStateType: "medium-text" as const,
 			width: 100,
 		},
 		{
 			id: "totalTime",
 			title: "Gesamtzeit",
-			loadingStateType: "medium-text",
+			loadingStateType: "medium-text" as const,
 			width: 120,
 		},
 	];
